@@ -82,7 +82,7 @@ struct IslandRootView: View {
                 notchHeight: session.notchHeight,
                 info: nowPlaying.info,
                 source: nowPlaying.source,
-                chips: chips.chips,
+                chips: chips,
                 shelf: shelf,
                 fileShelfEnabled: fileShelfEnabled,
                 reduceMotion: reduceMotion,
@@ -125,7 +125,7 @@ private struct IslandCanvas: View {
     var notchHeight: CGFloat
     var info: NowPlayingInfo
     var source: NowPlayingSource
-    var chips: [LiveChip]
+    @ObservedObject var chips: LiveChipStore
     @ObservedObject var shelf: FileShelfStore
     var fileShelfEnabled: Bool
     var reduceMotion: Bool
@@ -164,6 +164,8 @@ private struct IslandCanvas: View {
         .opacity(showsContent ? 1 : 0)
         .contentShape(Rectangle())
         .onTapGesture {
+            // Pin from chrome / artwork. Chips and the chevron are Buttons
+            // and consume the click so they never collapse the island.
             if !isPinned { onToggle() }
         }
         .accessibilityElement(children: showsContent ? .contain : .ignore)
@@ -198,7 +200,7 @@ private struct IslandCanvas: View {
                 .frame(width: extraOpen ? 0 : 16)
                 .opacity(extraOpen || !info.hasTrack ? 0 : 1)
                 .clipped()
-            ChipRow(chips: chips, compact: !isPinned)
+            ChipRow(store: chips, compact: !isPinned)
             Button(action: onCollapse) {
                 Image(systemName: "chevron.compact.up")
                     .font(.system(size: 14, weight: .semibold))
@@ -211,6 +213,7 @@ private struct IslandCanvas: View {
             .clipped()
             .allowsHitTesting(extraOpen)
             .accessibilityLabel("Collapse island")
+            .accessibilityHint("Or click outside the island")
             .accessibilityHidden(!extraOpen)
         }
     }

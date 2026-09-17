@@ -1,8 +1,8 @@
 # Shore
 
-Free, native **macOS** extras: a Dynamic Island–style notch (or floating pill) and a quiet Dock companion. One app, two optional modules, designed to stay out of the way.
+Free, native **macOS** extras: a Dynamic Island–style notch (or floating pill) and a Dock file cove. One app, two optional modules, designed to stay out of the way.
 
-Shore is **not** a feature dump, a Dock reskin, or an Electron wrapper. v1 is beauty-first: now-playing, a couple of live chips, and a shoreline above the Dock.
+Shore is **not** a feature dump, a Dock reskin, or an Electron wrapper. v1 is beauty-first: now-playing that looks like hardware, live chips that do something, and a file tray above the Dock.
 
 ## Download
 
@@ -28,9 +28,9 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 ## What Shore is
 
 - A menu-bar utility (`LSUIElement`) with no Dock icon of its own
-- **Island** — now-playing that hugs a notched MacBook camera housing, or a floating pill on other displays. Hover expands instantly from the notch; click pins the player.
-- **File shelf** — optional tray on the island: drop files to park them, drag them out later
-- **Tide Line** — a click-through glass line that sits above the system Dock
+- **Island** — now-playing that hugs a notched MacBook camera housing in true `#000000` bezel black, or a floating pill on other displays. Hover expands instantly from the notch; click pins the player; click outside dismisses.
+- **File shelf** — optional tray on the island: drop files to park them, drag them out later (same hold as Cove)
+- **Dock Cove** — a file tray above the system Dock. Appears when the Dock is revealed or when a file drag starts. Drop files in, retrieve them later.
 - Settings to enable or disable each module independently
 - On-device only. No account, no analytics, no network requirement
 
@@ -48,22 +48,22 @@ Free island apps already exist. Shore’s wedge is **Island + Dock together**, k
 ```
 Shore.app (SwiftUI, macOS 14+, Swift 6)
 ├── Menu bar extra + Settings window
-├── ShoreSettings          island / file-shelf / dock / sample-media toggles
+├── ShoreSettings          island / file-shelf / dock-cove / sample-media toggles
 ├── ShoreRuntime           starts and tears down modules
 ├── Island module
 │   ├── OverlayPanel       interactive, notch-aware placement, chrome-only hit testing
 │   ├── NowPlayingStore    MediaRemote (dlopen) → sample/idle fallback
-│   ├── LiveChipStore      battery (IOKit) + volume (CoreAudio)
-│   └── FileShelfStore     optional drop/drag file parking
+│   ├── LiveChipStore      battery (IOKit) + volume mute/drag (CoreAudio)
+│   └── FileShelfStore     shared drop/drag file parking
 └── Dock module
-    └── Tide Line panel    click-through hover polish above a bottom Dock
+    └── Cove panel         file tray above a bottom Dock (chrome-only hit testing)
 ```
 
 | Module | Behavior |
 | --- | --- |
-| Island | Resting chrome is flush to the hardware notch (bezel black, no gap). Hover morphs one elastic lip from the housing — same spring in and out, not a cross-fade. Click pins the player. Explicit collapse (chevron) ignores hover until the pointer leaves, so it does not bounce back open. Titles marquee instead of clipping into “Still Mar…”. Transparent panel wings stay click-through. |
-| File shelf | Optional. Drop files onto the expanded island to park them, drag tokens back out. Independent settings toggle. |
-| Tide Line | A short glass capsule above a **bottom** Dock. Mouse nearby lights a foam highlight. The panel ignores mouse events so Dock clicks pass through. Hidden when the Dock is on a side or auto-hidden to nothing. |
+| Island | Resting chrome is flush to the hardware notch (`#000000`, no gray fill, no material halo). Hover morphs one elastic lip from the housing — same snappy spring in and out, not a cross-fade. Click pins the player. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves, so it does not bounce back open. Volume chip mutes; battery chip is a live reading and does not dismiss the island. Titles marquee instead of clipping. Transparent panel wings stay click-through. |
+| File shelf | Optional island tray. Drop files to park them, drag tokens back out. Shares the hold with Dock Cove. Independent settings toggle. |
+| Dock Cove | Replaces the old Tide Line. A true-black tray above a **bottom** Dock: drop files here, retrieve later. Springs open when the Dock is revealed or a file drag starts. Hit-tests only its chrome so Dock icons stay clickable. Hidden when the Dock is on a side, unless a drag is in flight. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
 
 MediaRemote is a private Apple framework. Shore loads it at runtime and falls back if symbols are missing or now-playing is empty. That path cannot be exercised on Linux CI.
@@ -72,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — wet-stone fill, bezel-black notch hug, sea-glass accent, rounded SF. The island uses one elastic shape morph for expand and collapse (Reduce Motion shortens it and stills the waveform).
+Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island uses one elastic shape morph for expand and collapse (Reduce Motion shortens it and stills the waveform).
 
 Design placeholders (not live Mac screenshots):
 
@@ -80,7 +80,7 @@ Design placeholders (not live Mac screenshots):
 
 ![Island expanded](docs/screenshots/island-expanded.png)
 
-![Tide Line](docs/screenshots/tide-line.png)
+![Dock Cove](docs/screenshots/cove.png)
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -150,7 +150,7 @@ Shore/
   App/                   @main, delegate, runtime, settings store
   Design/                palette, motion, pill chrome
   Island/                panel, views, now-playing, chips, file shelf
-  Dock/                  Tide Line companion
+  Dock/                  Cove file tray
   Settings/              module toggles
   Support/               overlay NSPanel, screen / notch geometry
   Assets.xcassets

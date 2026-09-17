@@ -10,6 +10,7 @@ final class ShoreSettings: ObservableObject {
         didSet { defaults.set(islandEnabled, forKey: Keys.islandEnabled) }
     }
 
+    /// Dock Cove — file tray above a bottom Dock. Independent of the island file shelf.
     @Published var dockEnabled: Bool {
         didSet { defaults.set(dockEnabled, forKey: Keys.dockEnabled) }
     }
