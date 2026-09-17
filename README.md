@@ -28,7 +28,8 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 ## What Shore is
 
 - A menu-bar utility (`LSUIElement`) with no Dock icon of its own
-- **Island** — now-playing that hugs a notched MacBook camera housing, or a floating pill on other displays
+- **Island** — now-playing that hugs a notched MacBook camera housing, or a floating pill on other displays. Hover expands instantly from the notch; click pins the player.
+- **File shelf** — optional tray on the island: drop files to park them, drag them out later
 - **Tide Line** — a click-through glass line that sits above the system Dock
 - Settings to enable or disable each module independently
 - On-device only. No account, no analytics, no network requirement
@@ -47,19 +48,21 @@ Free island apps already exist. Shore’s wedge is **Island + Dock together**, k
 ```
 Shore.app (SwiftUI, macOS 14+, Swift 6)
 ├── Menu bar extra + Settings window
-├── ShoreSettings          island / dock / sample-media toggles
+├── ShoreSettings          island / file-shelf / dock / sample-media toggles
 ├── ShoreRuntime           starts and tears down modules
 ├── Island module
-│   ├── OverlayPanel       interactive, notch-aware placement
+│   ├── OverlayPanel       interactive, notch-aware placement, chrome-only hit testing
 │   ├── NowPlayingStore    MediaRemote (dlopen) → sample/idle fallback
-│   └── LiveChipStore      battery (IOKit) + volume (CoreAudio)
+│   ├── LiveChipStore      battery (IOKit) + volume (CoreAudio)
+│   └── FileShelfStore     optional drop/drag file parking
 └── Dock module
     └── Tide Line panel    click-through hover polish above a bottom Dock
 ```
 
 | Module | Behavior |
 | --- | --- |
-| Island | Collapsed pill shows artwork, title, 4-bar tide, battery + volume chips. Click to expand transport + progress. Click outside to collapse. On a notch, the chrome is square against the housing and rounded on the lip. Elsewhere it floats below the menu bar with ultra-thin material. |
+| Island | Resting state matches the hardware notch (bezel black, no gap). Hover expands a compact lip from the housing with a snappy spring. Click pins the player. Titles marquee instead of clipping into “Still Mar…”. Transparent panel wings stay click-through. |
+| File shelf | Optional. Drop files onto the expanded island to park them, drag tokens back out. Independent settings toggle. |
 | Tide Line | A short glass capsule above a **bottom** Dock. Mouse nearby lights a foam highlight. The panel ignores mouse events so Dock clicks pass through. Hidden when the Dock is on a side or auto-hidden to nothing. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
 
@@ -69,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — wet-stone fill, sea-glass accent, rounded SF, tide-curve motion (not a toy spring). Reduce Motion shortens animations and stills the waveform.
+Original **tidal glass** language — wet-stone fill, bezel-black notch hug, sea-glass accent, rounded SF. Hover uses a snappy spring (Reduce Motion shortens it and stills the waveform).
 
 Design placeholders (not live Mac screenshots):
 
@@ -146,7 +149,7 @@ Shore.xcodeproj          Xcode 16 / Swift 6 project / shared scheme
 Shore/
   App/                   @main, delegate, runtime, settings store
   Design/                palette, motion, pill chrome
-  Island/                panel, views, now-playing, chips
+  Island/                panel, views, now-playing, chips, file shelf
   Dock/                  Tide Line companion
   Settings/              module toggles
   Support/               overlay NSPanel, screen / notch geometry

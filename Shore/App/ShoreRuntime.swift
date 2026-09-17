@@ -6,6 +6,7 @@ final class ShoreRuntime {
     private let settings: ShoreSettings
     private let nowPlaying: NowPlayingStore
     private let chips: LiveChipStore
+    private let shelf: FileShelfStore
     private var island: IslandModule?
     private var dock: DockModule?
     private var cancellables = Set<AnyCancellable>()
@@ -15,6 +16,7 @@ final class ShoreRuntime {
         self.settings = settings
         self.nowPlaying = NowPlayingStore(settings: settings)
         self.chips = LiveChipStore()
+        self.shelf = FileShelfStore()
     }
 
     func start() {
@@ -45,7 +47,12 @@ final class ShoreRuntime {
     private func applyModules() {
         if settings.islandEnabled {
             if island == nil {
-                island = IslandModule(nowPlaying: nowPlaying, chips: chips)
+                island = IslandModule(
+                    nowPlaying: nowPlaying,
+                    chips: chips,
+                    settings: settings,
+                    shelf: shelf
+                )
             }
         } else if island != nil {
             island?.invalidate()

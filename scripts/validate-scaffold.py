@@ -62,6 +62,7 @@ def main() -> int:
         "Shore/Island/IslandModule.swift",
         "Shore/Island/NowPlaying.swift",
         "Shore/Island/LiveChips.swift",
+        "Shore/Island/FileShelf.swift",
         "Shore/Dock/DockModule.swift",
         "Shore/Settings/SettingsView.swift",
         "scripts/package-dmg.sh",
@@ -98,6 +99,8 @@ def main() -> int:
     settings = read(ROOT / "Shore/App/ShoreSettings.swift")
     if "islandEnabled" not in settings or "dockEnabled" not in settings:
         err("settings toggles missing")
+    if "fileShelfEnabled" not in settings:
+        err("file shelf settings toggle missing")
     if "@MainActor" not in settings:
         err("ShoreSettings must be MainActor-isolated")
     if "static let shared" not in settings:
@@ -134,6 +137,40 @@ def main() -> int:
     island = read(ROOT / "Shore/Island/IslandViews.swift")
     if "isExpanded" not in island:
         err("island expand/collapse missing")
+    if "ShoreMarquee" not in island:
+        err("island titles must use marquee or equivalent instead of cheap ellipsis")
+    if "ignoresSafeArea" not in island:
+        err("island chrome must ignore safe-area so it can hug the hardware notch")
+
+    theme = read(ROOT / "Shore/Design/ShoreTheme.swift")
+    if "IslandBlendShape" not in theme:
+        err("missing IslandBlendShape notch-blend chrome")
+    if "shoreSpring" not in theme:
+        err("missing snappy shoreSpring animation")
+    if "bezel" not in theme:
+        err("notch chrome must use bezel black")
+
+    geometry = read(ROOT / "Shore/Support/ScreenGeometry.swift")
+    if "notchHeight" not in geometry or "notchFrame" not in geometry:
+        err("screen geometry must expose notch height and frame")
+
+    overlay = read(ROOT / "Shore/Support/OverlayPanel.swift")
+    if "ignoresMouseEvents" not in overlay:
+        err("overlay panel must support click-through")
+    if "animationBehavior = .none" not in overlay:
+        err("overlay panel must disable system utility animation")
+    if "NSTrackingArea" not in overlay:
+        err("island surface must use NSTrackingArea for hover")
+    if "hitTest" not in overlay:
+        err("island surface must hit-test only the chrome")
+
+    module = read(ROOT / "Shore/Island/IslandModule.swift")
+    if "mouseMoved" not in module or "addGlobalMonitorForEvents" not in module:
+        err("island hover must monitor NSEvent mouseMoved globally")
+
+    shelf = read(ROOT / "Shore/Island/FileShelf.swift")
+    if "onDrop" not in shelf or "onDrag" not in shelf:
+        err("file shelf must support drop in and drag out")
 
     dock = read(ROOT / "Shore/Dock/DockModule.swift")
     if "ignoresMouseEvents" not in read(ROOT / "Shore/Support/OverlayPanel.swift"):

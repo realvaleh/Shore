@@ -1,27 +1,24 @@
 import AppKit
-import Combine
 import SwiftUI
 
 @MainActor
 final class IslandModule {
     private let session: IslandSession
-    private let nowPlaying: NowPlayingStore
-    private let chips: LiveChipStore
+    private let settings: ShoreSettings
     private let panel: OverlayPanel
+    private let surface: IslandSurfaceView
     private let host: NSHostingController<IslandRootView>
-    private var expandCancellable: AnyCancellable?
     private var monitors: [Any] = []
     private var screenObserver: NSObjectProtocol?
+    private var collapseWork: DispatchWorkItem?
 
-    init(nowPlaying: NowPlayingStore, chips: LiveChipStore) {
+    init(nowPlaying: NowPlayingStore, chips: LiveChipStore, settings: ShoreSettings, shelf: FileShelfStore) {
         let session = IslandSession()
         self.session = session
-        self.nowPlaying = nowPlaying
-        self.chips = chips
+        self.settings = settings
 
         let screen = ScreenGeometry.primary
-        session.hugsNotch = ScreenGeometry.hugsNotch(on: screen)
-        let size = Self.size(expanded: false, on: screen)
+        applyScreen(screen)
 
         let sessionRef = session
         host = NSHostingController(
@@ -29,66 +26,63 @@ final class IslandModule {
                 session: session,
                 nowPlaying: nowPlaying,
                 chips: chips,
-                onToggle: { sessionRef.isExpanded.toggle() },
-                onCollapse: { sessionRef.isExpanded = false }
+                shelf: shelf,
+                settings: settings,
+                onToggle: { sessionRef.isPinned = true },
+                onCollapse: { sessionRef.isPinned = false }
             )
         )
         host.view.wantsLayer = true
         host.view.layer?.backgroundColor = NSColor.clear.cgColor
         host.view.autoresizingMask = [.width, .height]
 
+        let size = IslandPlacement.panelSize(on: screen)
+        surface = IslandSurfaceView(frame: NSRect(origin: .zero, size: size))
+        surface.wantsLayer = true
+        surface.layer?.backgroundColor = NSColor.clear.cgColor
+        surface.addSubview(host.view)
+        host.view.frame = surface.bounds
+
         panel = OverlayPanel(size: size, interactive: true)
-        panel.contentView = host.view
-        panel.setFrame(IslandPlacement.frame(size: size, on: screen), display: true)
+        panel.contentView = surface
+        panel.setFrame(IslandPlacement.panelFrame(on: screen), display: true)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.35
+            context.duration = 0.28
             panel.animator().alphaValue = 1
         }
 
-        expandCancellable = session.$isExpanded
-            .removeDuplicates()
-            .sink { [weak self] expanded in
-                Task { @MainActor in
-                    self?.layout(expanded: expanded, animated: true)
-                }
-            }
+        surface.chromeRectInView = { [weak self] in
+            guard let self else { return .zero }
+            return IslandPlacement.chromeRect(in: self.surface.bounds, size: self.currentChromeSize())
+        }
+        surface.onPointerChange = { [weak self] in
+            self?.considerMouse(NSEvent.mouseLocation)
+        }
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                self?.layout(expanded: self?.session.isExpanded ?? false, animated: false)
-            }
+            Self.deliver { self?.relayoutPanel() }
         }
 
-        let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            Task { @MainActor in
-                self?.collapseIfOutside()
-            }
-            return event
-        }
-        let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in
-                self?.collapseIfOutside()
-            }
-        }
-        if let local { monitors.append(local) }
-        if let global { monitors.append(global) }
+        installPointerMonitors()
+        considerMouse(NSEvent.mouseLocation)
     }
 
     func invalidate() {
-        expandCancellable = nil
+        collapseWork?.cancel()
+        collapseWork = nil
         monitors.forEach { NSEvent.removeMonitor($0) }
         monitors.removeAll()
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
         }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
+            context.duration = 0.16
             panel.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             Task { @MainActor in
@@ -99,39 +93,122 @@ final class IslandModule {
         }
     }
 
-    private func collapseIfOutside() {
-        guard session.isExpanded else { return }
-        if !panel.frame.contains(NSEvent.mouseLocation) {
-            session.isExpanded = false
+    private func installPointerMonitors() {
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        let local = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            Self.deliver { self?.considerMouse(NSEvent.mouseLocation) }
+            return event
         }
+        let global = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            Self.deliver { self?.considerMouse(NSEvent.mouseLocation) }
+        }
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        let localClick = NSEvent.addLocalMonitorForEvents(matching: clicks) { [weak self] event in
+            Self.deliver { self?.unpinIfOutside() }
+            return event
+        }
+        let globalClick = NSEvent.addGlobalMonitorForEvents(matching: clicks) { [weak self] _ in
+            Self.deliver { self?.unpinIfOutside() }
+        }
+        if let local { monitors.append(local) }
+        if let global { monitors.append(global) }
+        if let localClick { monitors.append(localClick) }
+        if let globalClick { monitors.append(globalClick) }
     }
 
-    private func layout(expanded: Bool, animated: Bool) {
+    private func considerMouse(_ point: CGPoint) {
         let screen = ScreenGeometry.primary
-        session.hugsNotch = ScreenGeometry.hugsNotch(on: screen)
-        let size = Self.size(expanded: expanded, on: screen)
-        let frame = IslandPlacement.frame(size: size, on: screen)
-        host.view.setFrameSize(size)
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.42
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.0, 0.36, 1.0)
-                panel.animator().setFrame(frame, display: true)
-            }
+        applyScreen(screen)
+        let size = currentChromeSize()
+        var zone = IslandPlacement.hoverZone(
+            chromeSize: size,
+            hovering: session.isHovering,
+            pinned: session.isPinned,
+            on: screen
+        )
+        if settings.fileShelfEnabled, Self.dragPasteboardHasFiles() {
+            zone = zone.insetBy(dx: -36, dy: -36)
+        }
+        if zone.contains(point) {
+            setHovering(true)
+        } else if !session.isPinned {
+            setHovering(false)
         } else {
-            panel.setFrame(frame, display: true)
+            setHovering(false)
         }
     }
 
-    private static func size(expanded: Bool, on screen: NSScreen) -> CGSize {
-        let collapsedWidth = IslandPlacement.collapsedWidth(on: screen)
-        let extraTop: CGFloat = ScreenGeometry.hugsNotch(on: screen) ? 10 : 0
-        if expanded {
-            return CGSize(
-                width: max(IslandMetrics.expandedSize.width, collapsedWidth),
-                height: IslandMetrics.expandedSize.height + extraTop
-            )
+    private func setHovering(_ on: Bool) {
+        if on {
+            collapseWork?.cancel()
+            collapseWork = nil
+            if !session.isHovering {
+                session.isHovering = true
+            }
+            return
         }
-        return CGSize(width: collapsedWidth, height: IslandMetrics.collapsedHeight + extraTop)
+        guard session.isHovering else { return }
+        collapseWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.session.isHovering = false
+        }
+        collapseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.07, execute: work)
+    }
+
+    private func unpinIfOutside() {
+        guard session.isPinned else { return }
+        let size = currentChromeSize()
+        let chrome = IslandPlacement.hoverZone(
+            chromeSize: size,
+            hovering: true,
+            pinned: true,
+            on: ScreenGeometry.primary
+        )
+        if !chrome.contains(NSEvent.mouseLocation) {
+            session.isPinned = false
+            setHovering(false)
+        }
+    }
+
+    private func relayoutPanel() {
+        let screen = ScreenGeometry.primary
+        applyScreen(screen)
+        let frame = IslandPlacement.panelFrame(on: screen)
+        panel.setFrame(frame, display: true)
+        surface.setFrameSize(frame.size)
+        host.view.setFrameSize(frame.size)
+        considerMouse(NSEvent.mouseLocation)
+    }
+
+    private func applyScreen(_ screen: NSScreen) {
+        session.hugsNotch = ScreenGeometry.hugsNotch(on: screen)
+        let notch = ScreenGeometry.notchSize(on: screen) ?? .zero
+        session.notchWidth = notch.width
+        session.notchHeight = notch.height
+    }
+
+    private func currentChromeSize() -> CGSize {
+        IslandPlacement.chromeSize(
+            hovering: session.isHovering,
+            pinned: session.isPinned,
+            hugsNotch: session.hugsNotch,
+            notch: CGSize(width: session.notchWidth, height: session.notchHeight),
+            shelfVisible: settings.fileShelfEnabled && (session.isHovering || session.isPinned)
+        )
+    }
+
+    private static func dragPasteboardHasFiles() -> Bool {
+        let pasteboard = NSPasteboard(name: .drag)
+        return pasteboard.availableType(from: [.fileURL]) != nil
+    }
+
+    /// Pointer monitors are added on the main thread; hop only when Swift 6 isolation requires it.
+    nonisolated private static func deliver(_ work: @escaping @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(work)
+        } else {
+            DispatchQueue.main.async { work() }
+        }
     }
 }

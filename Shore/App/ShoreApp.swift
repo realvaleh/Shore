@@ -23,6 +23,7 @@ private struct MenuBarContent: View {
 
     var body: some View {
         Toggle("Island", isOn: $settings.islandEnabled)
+        Toggle("File shelf", isOn: $settings.fileShelfEnabled)
         Toggle("Dock Tide Line", isOn: $settings.dockEnabled)
         Divider()
         SettingsLink {

@@ -8,9 +8,15 @@ struct SettingsView: View {
             header
             moduleCard(
                 title: "Island",
-                subtitle: "Now playing in the notch, or a floating pill on other Macs.",
+                subtitle: "Hugs the hardware notch. Hover expands instantly; click pins the player.",
                 symbol: "water.waves",
                 isOn: $settings.islandEnabled
+            )
+            moduleCard(
+                title: "File shelf",
+                subtitle: "Drop files onto the island to park them, then drag them out when you need them.",
+                symbol: "tray",
+                isOn: $settings.fileShelfEnabled
             )
             moduleCard(
                 title: "Dock Tide Line",
@@ -35,7 +41,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(24)
-        .frame(width: 380, height: 430)
+        .frame(width: 380, height: 520)
     }
 
     private var header: some View {

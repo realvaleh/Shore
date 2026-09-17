@@ -3,24 +3,67 @@ import SwiftUI
 
 @MainActor
 final class IslandSession: ObservableObject {
-    @Published var isExpanded = false
+    @Published var isPinned = false
     @Published var isHovering = false
     @Published var hugsNotch = false
+    @Published var notchWidth: CGFloat = 0
+    @Published var notchHeight: CGFloat = 0
+
+    var isExpanded: Bool { isPinned }
 }
 
 struct IslandRootView: View {
     @ObservedObject var session: IslandSession
     @ObservedObject var nowPlaying: NowPlayingStore
     @ObservedObject var chips: LiveChipStore
+    @ObservedObject var shelf: FileShelfStore
+    @ObservedObject var settings: ShoreSettings
     var onToggle: () -> Void
     var onCollapse: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var islandSpace
 
+    private var fileShelfEnabled: Bool { settings.fileShelfEnabled }
+
+    private var chromeSize: CGSize {
+        IslandPlacement.chromeSize(
+            hovering: session.isHovering,
+            pinned: session.isPinned,
+            hugsNotch: session.hugsNotch,
+            notch: CGSize(width: session.notchWidth, height: session.notchHeight),
+            shelfVisible: fileShelfEnabled && (session.isHovering || session.isPinned)
+        )
+    }
+
     var body: some View {
-        Group {
-            if session.isExpanded {
+        ZStack(alignment: .top) {
+            IslandChrome(
+                hugsNotch: session.hugsNotch,
+                notchWidth: session.notchWidth,
+                notchHeight: session.notchHeight,
+                expanded: session.isHovering || session.isPinned
+            )
+            .frame(width: chromeSize.width, height: chromeSize.height)
+
+            islandBody
+                .padding(.top, session.hugsNotch && (session.isHovering || session.isPinned) ? session.notchHeight : 0)
+                .padding(.horizontal, session.isPinned ? 16 : (session.hugsNotch && !session.isHovering ? 0 : 12))
+                .padding(.bottom, session.isPinned ? 14 : (session.hugsNotch && !session.isHovering ? 0 : 8))
+                .frame(width: chromeSize.width, height: chromeSize.height, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
+        .animation(reduceMotion ? .shoreQuiet : .shoreSpring, value: session.isHovering)
+        .animation(reduceMotion ? .shoreQuiet : .shoreSpring, value: session.isPinned)
+        .animation(reduceMotion ? .shoreQuiet : .shoreSpring, value: chromeSize)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var islandBody: some View {
+        if session.isPinned {
+            VStack(spacing: 10) {
                 IslandExpandedView(
                     info: nowPlaying.info,
                     source: nowPlaying.source,
@@ -33,7 +76,20 @@ struct IslandRootView: View {
                     onPrevious: { nowPlaying.previous() },
                     onNext: { nowPlaying.next() }
                 )
-            } else {
+                if fileShelfEnabled {
+                    FileShelfView(store: shelf)
+                }
+            }
+        } else if session.hugsNotch && !session.isHovering {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onToggle)
+                .accessibilityElement()
+                .accessibilityLabel("Shore island")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Expands the Shore island")
+        } else {
+            VStack(spacing: 8) {
                 IslandCollapsedView(
                     info: nowPlaying.info,
                     chips: chips.chips,
@@ -43,17 +99,11 @@ struct IslandRootView: View {
                     namespace: islandSpace
                 )
                 .onTapGesture(perform: onToggle)
+                if fileShelfEnabled, session.isHovering {
+                    FileShelfView(store: shelf, compact: true)
+                }
             }
         }
-        .padding(.top, session.hugsNotch && !session.isExpanded ? 8 : 0)
-        .padding(session.isExpanded ? 12 : 6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            IslandChrome(hugsNotch: session.hugsNotch, expanded: session.isExpanded)
-        }
-        .onHover { session.isHovering = $0 }
-        .animation(reduceMotion ? .shoreQuiet : .shoreTide, value: session.isExpanded)
-        .accessibilityElement(children: .contain)
     }
 }
 
@@ -66,29 +116,34 @@ struct IslandCollapsedView: View {
     var namespace: Namespace.ID
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             artwork
             if info.hasTrack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(info.title)
-                        .font(ShoreType.title(11.5))
-                        .foregroundStyle(ShorePalette.foam)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    ShoreMarquee(
+                        text: info.title,
+                        font: ShoreType.title(12.5),
+                        color: ShorePalette.foam,
+                        reduceMotion: reduceMotion
+                    )
+                    .frame(height: 16)
                     Text(info.artist)
-                        .font(ShoreType.body(10))
-                        .foregroundStyle(ShorePalette.foam.opacity(0.55))
+                        .font(ShoreType.body(10.5))
+                        .foregroundStyle(ShorePalette.foam.opacity(0.58))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
             } else {
                 Text("Shore")
-                    .font(ShoreType.title(12))
+                    .font(ShoreType.title(13))
                     .foregroundStyle(ShorePalette.foam.opacity(0.88))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Spacer(minLength: 4)
-            ChipRow(chips: chips)
+            ChipRow(chips: chips, compact: true)
         }
-        .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .opacity(hovering ? 1 : 0.96)
         .accessibilityElement(children: .ignore)
@@ -108,8 +163,8 @@ struct IslandCollapsedView: View {
                 SampleArtwork(compact: true)
             }
         }
-        .frame(width: 22, height: 22)
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .matchedGeometryEffect(id: "art", in: namespace)
         .accessibilityHidden(true)
     }
@@ -136,20 +191,25 @@ struct IslandExpandedView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
                 artwork
                 VStack(alignment: .leading, spacing: 4) {
                     Text(info.hasTrack ? info.title : "Nothing playing")
-                        .font(ShoreType.title(15))
+                        .font(ShoreType.title(16))
                         .foregroundStyle(ShorePalette.foam)
                         .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .minimumScaleFactor(0.88)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
                         .font(ShoreType.body(12))
                         .foregroundStyle(ShorePalette.foam.opacity(0.58))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer(minLength: 0)
                     progress
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onCollapse) {
                     Image(systemName: "chevron.compact.up")
                         .font(.system(size: 14, weight: .semibold))
@@ -161,8 +221,8 @@ struct IslandExpandedView: View {
             }
             HStack(spacing: 14) {
                 transport
-                Spacer()
-                ChipRow(chips: chips)
+                Spacer(minLength: 8)
+                ChipRow(chips: chips, compact: false)
             }
         }
         .accessibilityElement(children: .contain)
@@ -185,8 +245,8 @@ struct IslandExpandedView: View {
                 SampleArtwork(compact: false)
             }
         }
-        .frame(width: 72, height: 72)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(width: 76, height: 76)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .matchedGeometryEffect(id: "art", in: namespace)
     }
 
@@ -240,14 +300,20 @@ private struct IconButton: View {
 
 #Preview("Collapsed") {
     let session = IslandSession()
-    IslandRootView(
+    session.isHovering = true
+    session.hugsNotch = true
+    session.notchWidth = 184
+    session.notchHeight = 32
+    return IslandRootView(
         session: session,
         nowPlaying: NowPlayingStore(settings: .shared),
         chips: LiveChipStore(),
-        onToggle: { session.isExpanded = true },
-        onCollapse: { session.isExpanded = false }
+        shelf: FileShelfStore(),
+        settings: .shared,
+        onToggle: { session.isPinned = true },
+        onCollapse: { session.isPinned = false }
     )
-    .frame(width: 280, height: 44)
+    .frame(width: 428, height: 220)
     .padding()
     .background(Color.gray)
 }
