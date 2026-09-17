@@ -21,10 +21,10 @@ def rounded_rect(draw, xy, radius, fill, outline=None, width=1):
     draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
 
 
-def make_icon(size: int) -> Image.Image:
+def make_icon(size: int, opaque: bool = False) -> Image.Image:
     import math
 
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    img = Image.new("RGBA", (size, size), INK if opaque else (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     pad = int(size * 0.09)
     radius = int(size * 0.22)
@@ -69,8 +69,8 @@ def make_icon(size: int) -> Image.Image:
 
 def write_icons():
     ICON_DIR.mkdir(parents=True, exist_ok=True)
-    master = make_icon(1024)
-    master.save(ICON_DIR / "AppIcon-1024.png")
+    master = make_icon(1024, opaque=True)
+    master.convert("RGB").save(ICON_DIR / "AppIcon-1024.png")
 
     slots = [
         (16, "icon_16x16.png"),
@@ -97,6 +97,14 @@ def write_icons():
                 "size": f"{logical}x{logical}",
             }
         )
+    images.append(
+        {
+            "filename": "AppIcon-1024.png",
+            "idiom": "mac",
+            "scale": "1x",
+            "size": "1024x1024",
+        }
+    )
     import json
 
     (ICON_DIR / "Contents.json").write_text(

@@ -242,7 +242,7 @@ private struct IconButton: View {
     let session = IslandSession()
     IslandRootView(
         session: session,
-        nowPlaying: NowPlayingStore(),
+        nowPlaying: NowPlayingStore(settings: .shared),
         chips: LiveChipStore(),
         onToggle: { session.isExpanded = true },
         onCollapse: { session.isExpanded = false }

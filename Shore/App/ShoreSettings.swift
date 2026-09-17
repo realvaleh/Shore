@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 final class ShoreSettings: ObservableObject {
+    /// Main-actor singleton. Do not use as a default argument — those are nonisolated in Swift 6.
     static let shared = ShoreSettings()
 
     @Published var islandEnabled: Bool {
