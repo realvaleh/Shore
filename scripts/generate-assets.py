@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 ICON_DIR = ROOT / "Shore" / "Assets.xcassets" / "AppIcon.appiconset"
@@ -15,6 +15,8 @@ FOAM = (232, 238, 240, 255)
 SEA = (124, 158, 160, 255)
 KELP = (61, 90, 84, 255)
 SAND = (196, 184, 165, 255)
+BEZEL = (0, 0, 0, 255)
+DESK = (18, 20, 22, 255)
 
 
 def rounded_rect(draw, xy, radius, fill, outline=None, width=1):
@@ -131,9 +133,6 @@ def draw_pill(base, xy, radius, fill=INK, stroke=(255, 255, 255, 40)):
     return Image.alpha_composite(base, overlay)
 
 
-BEZEL = (0, 0, 0, 255)
-
-
 def draw_notch_blend(base, notch, body, radius=18, fill=BEZEL):
     """One continuous housing: square against the top, rounded only on the desktop lip."""
     import math
@@ -164,28 +163,28 @@ def draw_notch_blend(base, notch, body, radius=18, fill=BEZEL):
 
 
 def island_collapsed(path: Path):
-    img = Image.new("RGBA", (1280, 720), (18, 20, 22, 255))
+    img = Image.new("RGBA", (1280, 720), DESK)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, 1280, 32), fill=(20, 22, 24, 255))
+    d.rectangle((0, 0, 1280, 32), fill=BEZEL)
     d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
     d.text((1180, 8), "100%", font=font(12), fill=(200, 204, 208, 180))
-    img = draw_notch_blend(img, (548, 0, 732, 32), (470, 32, 810, 86), radius=18)
+    img = draw_notch_blend(img, (548, 0, 732, 32), (470, 32, 810, 86), radius=18, fill=BEZEL)
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((488, 42, 512, 66), radius=6, fill=KELP)
     d.text((522, 42), "Low Tide", font=font(14, True), fill=FOAM)
     d.text((522, 60), "Still Harbor", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
-    d.rounded_rectangle((742, 46, 766, 64), radius=8, fill=INK_LIFT)
-    d.rounded_rectangle((772, 46, 796, 64), radius=8, fill=INK_LIFT)
-    d.text((40, 660), "Design placeholder · Island hugging the hardware notch", font=font(14), fill=(160, 166, 170, 200))
+    d.rounded_rectangle((742, 46, 766, 64), radius=8, fill=(255, 255, 255, 22))
+    d.rounded_rectangle((772, 46, 796, 64), radius=8, fill=(255, 255, 255, 22))
+    d.text((40, 660), "Design placeholder · True-black island hugging the hardware notch", font=font(14), fill=(160, 166, 170, 200))
     img.convert("RGB").save(path, quality=92)
 
 
 def island_expanded(path: Path):
-    img = Image.new("RGBA", (1280, 720), (18, 20, 22, 255))
+    img = Image.new("RGBA", (1280, 720), DESK)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, 1280, 32), fill=(20, 22, 24, 255))
+    d.rectangle((0, 0, 1280, 32), fill=BEZEL)
     d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
-    img = draw_notch_blend(img, (548, 0, 732, 32), (426, 32, 854, 250), radius=22)
+    img = draw_notch_blend(img, (548, 0, 732, 32), (426, 32, 854, 250), radius=22, fill=BEZEL)
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((448, 48, 532, 132), radius=14, fill=KELP)
     d.text((548, 52), "Low Tide", font=font(20, True), fill=FOAM)
@@ -195,28 +194,35 @@ def island_expanded(path: Path):
     d.polygon((488, 168, 476, 176, 488, 184), fill=FOAM)
     d.ellipse((506, 156, 548, 198), fill=FOAM)
     d.polygon((566, 168, 578, 176, 566, 184), fill=FOAM)
-    d.rounded_rectangle((620, 164, 668, 188), radius=8, fill=INK_LIFT)
+    d.rounded_rectangle((620, 164, 668, 188), radius=8, fill=(255, 255, 255, 22))
     d.text((628, 168), "87%", font=font(10), fill=FOAM)
-    d.rounded_rectangle((676, 164, 720, 188), radius=8, fill=INK_LIFT)
+    d.rounded_rectangle((676, 164, 720, 188), radius=8, fill=(255, 255, 255, 22))
     d.text((684, 168), "42", font=font(10), fill=FOAM)
-    d.rounded_rectangle((448, 204, 832, 236), radius=10, fill=INK_LIFT)
+    d.rounded_rectangle((448, 204, 832, 236), radius=10, fill=(255, 255, 255, 18))
     d.text((460, 212), "Shelf   notes.pdf    shot.png", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 180))
-    d.text((40, 660), "Design placeholder · Island expanded from the notch + file shelf", font=font(14), fill=(160, 166, 170, 200))
+    d.text((40, 660), "Design placeholder · True-black island expanded from the notch", font=font(14), fill=(160, 166, 170, 200))
     img.convert("RGB").save(path, quality=92)
 
 
-def tide_line(path: Path):
-    img = Image.new("RGBA", (1280, 720), (18, 20, 22, 255))
+def cove(path: Path):
+    img = Image.new("RGBA", (1280, 720), DESK)
     d = ImageDraw.Draw(img)
     # Fake dock
-    d.rounded_rectangle((360, 640, 920, 704), radius=18, fill=(40, 44, 48, 210))
+    d.rounded_rectangle((360, 640, 920, 704), radius=18, fill=(28, 30, 32, 230))
     for i, x in enumerate(range(390, 900, 70)):
         color = SEA if i == 3 else (90, 96, 100, 255)
         d.rounded_rectangle((x, 652, x + 44, 696), radius=10, fill=color)
-    # Tide line
-    d.rounded_rectangle((430, 622, 850, 632), radius=6, fill=(180, 200, 200, 50))
-    d.ellipse((590, 618, 670, 636), fill=(FOAM[0], FOAM[1], FOAM[2], 90))
-    d.text((40, 40), "Design placeholder · Tide Line above the Dock", font=font(14), fill=(160, 166, 170, 200))
+    # File cove tray
+    d.rounded_rectangle((400, 552, 880, 628), radius=16, fill=BEZEL, outline=SEA, width=1)
+    d.text((424, 566), "Cove", font=font(12, True), fill=FOAM)
+    d.text((820, 566), "Clear", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 140))
+    d.rounded_rectangle((424, 590, 548, 616), radius=10, fill=(255, 255, 255, 22))
+    d.text((436, 594), "notes.pdf", font=font(11), fill=FOAM)
+    d.rounded_rectangle((560, 590, 676, 616), radius=10, fill=(255, 255, 255, 22))
+    d.text((572, 594), "shot.png", font=font(11), fill=FOAM)
+    d.rounded_rectangle((688, 590, 800, 616), radius=10, fill=(255, 255, 255, 22))
+    d.text((700, 594), "reel.mov", font=font(11), fill=FOAM)
+    d.text((40, 40), "Design placeholder · Dock Cove file tray", font=font(14), fill=(160, 166, 170, 200))
     img.convert("RGB").save(path, quality=92)
 
 
@@ -229,16 +235,16 @@ def settings(path: Path):
     d.text((460, 154), "Quiet extras for the Mac.", font=font(13), fill=(80, 84, 88, 255))
     d.rounded_rectangle((460, 200, 820, 280), radius=14, fill=(236, 236, 236, 255))
     d.text((478, 214), "Island", font=font(15, True), fill=INK)
-    d.text((478, 238), "Hugs the hardware notch.", font=font(12), fill=(90, 94, 98, 255))
-    d.text((478, 256), "Hover expands; click pins the player.", font=font(12), fill=(90, 94, 98, 255))
+    d.text((478, 238), "True-black notch hug.", font=font(12), fill=(90, 94, 98, 255))
+    d.text((478, 256), "Hover expands; click-outside dismisses.", font=font(12), fill=(90, 94, 98, 255))
     d.rounded_rectangle((760, 226, 804, 250), radius=12, fill=SEA)
     d.rounded_rectangle((460, 300, 820, 380), radius=14, fill=(236, 236, 236, 255))
     d.text((478, 314), "File shelf", font=font(15, True), fill=INK)
     d.text((478, 338), "Drop files onto the island to park them.", font=font(12), fill=(90, 94, 98, 255))
     d.rounded_rectangle((760, 326, 804, 350), radius=12, fill=SEA)
     d.rounded_rectangle((460, 400, 820, 480), radius=14, fill=(236, 236, 236, 255))
-    d.text((478, 414), "Dock Tide Line", font=font(15, True), fill=INK)
-    d.text((478, 438), "A quiet glass shoreline above the Dock.", font=font(12), fill=(90, 94, 98, 255))
+    d.text((478, 414), "Dock Cove", font=font(15, True), fill=INK)
+    d.text((478, 438), "File tray above the Dock. Drop in, drag out.", font=font(12), fill=(90, 94, 98, 255))
     d.rounded_rectangle((760, 426, 804, 450), radius=12, fill=SEA)
     d.text((478, 510), "Sample media when idle", font=font(14, True), fill=INK)
     img = Image.alpha_composite(img, panel)
@@ -252,7 +258,7 @@ def main():
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
     island_collapsed(SHOT_DIR / "island-collapsed.png")
     island_expanded(SHOT_DIR / "island-expanded.png")
-    tide_line(SHOT_DIR / "tide-line.png")
+    cove(SHOT_DIR / "cove.png")
     settings(SHOT_DIR / "settings.png")
     print("Wrote icons and screenshot placeholders")
 

@@ -10,7 +10,7 @@ enum ScreenGeometry {
         max(0, screen.frame.maxY - screen.visibleFrame.maxY)
     }
 
-    /// Bottom Dock only. Side Dock returns 0 — Tide Line hides in that case.
+    /// Bottom Dock only. Side Dock returns 0 — Cove hides in that case unless a file drag is active.
     static func bottomDockHeight(on screen: NSScreen) -> CGFloat {
         max(0, screen.visibleFrame.minY - screen.frame.minY)
     }

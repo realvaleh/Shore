@@ -61,7 +61,7 @@ final class ShoreRuntime {
 
         if settings.dockEnabled {
             if dock == nil {
-                dock = DockModule()
+                dock = DockModule(shelf: shelf)
             }
         } else if dock != nil {
             dock?.invalidate()

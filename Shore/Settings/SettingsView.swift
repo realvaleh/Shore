@@ -14,14 +14,14 @@ struct SettingsView: View {
             )
             moduleCard(
                 title: "File shelf",
-                subtitle: "Drop files onto the island to park them, then drag them out when you need them.",
+                subtitle: "Optional island tray for the same parked files as Dock Cove.",
                 symbol: "tray",
                 isOn: $settings.fileShelfEnabled
             )
             moduleCard(
-                title: "Dock Tide Line",
-                subtitle: "A quiet glass shoreline above the Dock. Click-through, original, minimal.",
-                symbol: "dock.rectangle",
+                title: "Dock Cove",
+                subtitle: "A file tray above the Dock. Drop files to park them, drag them out when you need them.",
+                symbol: "tray",
                 isOn: $settings.dockEnabled
             )
             Toggle(isOn: $settings.sampleWhenIdle) {

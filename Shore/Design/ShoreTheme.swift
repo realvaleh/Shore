@@ -8,8 +8,8 @@ enum ShorePalette {
     static let seaGlass = Color(red: 0.486, green: 0.620, blue: 0.627)
     static let kelp = Color(red: 0.239, green: 0.353, blue: 0.329)
     static let sand = Color(red: 0.769, green: 0.722, blue: 0.647)
-    /// Same black as the MacBook camera housing / bezel.
-    static let bezel = Color.black
+    /// Hardware camera housing — true `#000000`, not a gray material.
+    static let bezel = Color(red: 0, green: 0, blue: 0)
 }
 
 enum IslandMetrics {
@@ -30,8 +30,8 @@ enum IslandMetrics {
 }
 
 extension Animation {
-    /// Elastic shape morph — same spring for expand and collapse (not a cross-fade).
-    static let shoreMorph = Animation.spring(response: 0.30, dampingFraction: 0.72)
+    /// Snappy spring morph — same physics for expand and collapse (not a cross-fade).
+    static let shoreMorph = Animation.spring(response: 0.26, dampingFraction: 0.68)
     static let shoreSpring = shoreMorph
     static let shoreFoam = Animation.easeInOut(duration: 0.18)
     static let shoreQuiet = Animation.easeOut(duration: 0.12)
@@ -174,55 +174,30 @@ struct IslandChrome: View {
     var body: some View {
         Group {
             if hugsNotch {
-                bezelFill
+                IslandBlendShape(
+                    notchWidth: notchWidth,
+                    notchHeight: notchHeight,
+                    cornerRadius: radius,
+                    invertedRadius: IslandMetrics.invertedRadius
+                )
+                .fill(ShorePalette.bezel)
             } else {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(ShorePalette.ink.opacity(0.78))
-                    }
+                    .fill(ShorePalette.bezel)
             }
         }
         .overlay { edgeLight }
         .shadow(
-            color: .black.opacity(hugsNotch ? 0 : 0.32),
-            radius: hugsNotch ? 0 : 20,
-            y: hugsNotch ? 0 : 10
-        )
-    }
-
-    private var bezelFill: some View {
-        IslandBlendShape(
-            notchWidth: notchWidth,
-            notchHeight: notchHeight,
-            cornerRadius: radius,
-            invertedRadius: IslandMetrics.invertedRadius
-        )
-        .fill(
-            LinearGradient(
-                colors: [
-                    ShorePalette.bezel,
-                    ShorePalette.bezel,
-                    ShorePalette.ink.opacity(0.98)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            color: ShorePalette.bezel.opacity(hugsNotch ? 0 : 0.45),
+            radius: hugsNotch ? 0 : 16,
+            y: hugsNotch ? 0 : 8
         )
     }
 
     @ViewBuilder
     private var edgeLight: some View {
-        let gradient = LinearGradient(
-            colors: [
-                Color.white.opacity(hugsNotch ? 0.08 : 0.20),
-                Color.white.opacity(0.04),
-                ShorePalette.seaGlass.opacity(0.22)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        // Hairline on the desktop lip only. No gray halo, no material fringe,
+        // and never a stroke on the housing edge (that would read as a seam).
         if hugsNotch {
             NotchLipStroke(
                 notchWidth: notchWidth,
@@ -230,10 +205,10 @@ struct IslandChrome: View {
                 cornerRadius: radius,
                 invertedRadius: IslandMetrics.invertedRadius
             )
-            .stroke(gradient, lineWidth: 0.8)
+            .stroke(Color.white.opacity(0.05), lineWidth: 0.6)
         } else {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(gradient, lineWidth: 0.8)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.6)
         }
     }
 }

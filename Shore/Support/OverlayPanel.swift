@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Borderless floating panel used by both Island (interactive) and Tide Line (click-through).
+/// Borderless floating panel used by both Island (interactive) and Dock Cove (chrome-only hit testing).
 @MainActor
 final class OverlayPanel: NSPanel {
     init(size: NSSize, interactive: Bool) {

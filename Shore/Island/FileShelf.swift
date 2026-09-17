@@ -102,7 +102,7 @@ struct FileShelfView: View {
         .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(ShorePalette.inkLift.opacity(targeted ? 0.95 : 0.55))
+                .fill(Color.white.opacity(targeted ? 0.10 : 0.05))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
@@ -112,7 +112,7 @@ struct FileShelfView: View {
                 }
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $targeted) { providers in
-            Self.collect(providers) { urls in
+            FileDropCollector.collect(providers) { urls in
                 store.add(urls: urls)
             }
             return true
@@ -120,29 +120,29 @@ struct FileShelfView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("File shelf")
     }
+}
 
-    private static func collect(_ providers: [NSItemProvider], done: @escaping @MainActor ([URL]) -> Void) {
+enum FileDropCollector {
+    static func collect(_ providers: [NSItemProvider], done: @escaping @MainActor ([URL]) -> Void) {
+        let box = FileDropURLBox()
         let group = DispatchGroup()
-        let lock = NSLock()
-        var urls: [URL] = []
         for provider in providers {
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 defer { group.leave() }
                 guard let url = Self.url(from: item) else { return }
-                lock.lock()
-                urls.append(url)
-                lock.unlock()
+                box.append(url)
             }
         }
         group.notify(queue: .main) {
+            let urls = box.snapshot()
             Task { @MainActor in
                 done(urls)
             }
         }
     }
 
-    nonisolated private static func url(from item: NSSecureCoding?) -> URL? {
+    nonisolated static func url(from item: NSSecureCoding?) -> URL? {
         if let url = item as? URL { return url }
         if let url = item as? NSURL { return url as URL }
         if let data = item as? Data {
@@ -155,7 +155,25 @@ struct FileShelfView: View {
     }
 }
 
-private struct FileShelfToken: View {
+/// Collects drop URLs from concurrent `NSItemProvider` callbacks without capturing a mutating Array.
+private final class FileDropURLBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+
+    func append(_ url: URL) {
+        lock.lock()
+        urls.append(url)
+        lock.unlock()
+    }
+
+    func snapshot() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urls
+    }
+}
+
+struct FileShelfToken: View {
     var item: FileShelfStore.Item
     var onRemove: () -> Void
 
@@ -176,7 +194,7 @@ private struct FileShelfToken: View {
         .padding(.vertical, 5)
         .background {
             Capsule(style: .continuous)
-                .fill(ShorePalette.ink.opacity(0.85))
+                .fill(Color.white.opacity(0.08))
                 .overlay {
                     Capsule(style: .continuous)
                         .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
@@ -186,7 +204,10 @@ private struct FileShelfToken: View {
             NSItemProvider(object: item.url as NSURL)
         }
         .contextMenu {
-            Button("Remove from shelf", action: onRemove)
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([item.url])
+            }
+            Button("Remove", action: onRemove)
         }
         .help(item.path)
         .accessibilityLabel(item.name)

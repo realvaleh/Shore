@@ -68,7 +68,7 @@ def main() -> int:
         "scripts/package-dmg.sh",
         "docs/screenshots/island-collapsed.png",
         "docs/screenshots/island-expanded.png",
-        "docs/screenshots/tide-line.png",
+        "docs/screenshots/cove.png",
         "docs/screenshots/settings.png",
     ]
     for rel in required:
@@ -145,14 +145,24 @@ def main() -> int:
         err("island must morph one canvas, not cross-fade two layouts")
     if "collapseExplicitly" not in island or "hoverSuspended" not in island:
         err("island must suspend hover after an explicit collapse")
+    if "ChipRow(store:" not in island:
+        err("island chips must be wired as interactive controls, not silent collapse targets")
 
     theme = read(ROOT / "Shore/Design/ShoreTheme.swift")
+    if "static var defaultValue" in theme:
+        err("PreferenceKey defaultValue must be a static let (Swift 6 concurrency)")
     if "IslandBlendShape" not in theme:
         err("missing IslandBlendShape notch-blend chrome")
     if "shoreMorph" not in theme:
         err("missing elastic shoreMorph animation")
     if "bezel" not in theme:
         err("notch chrome must use bezel black")
+    if "Color(red: 0, green: 0, blue: 0)" not in theme:
+        err("bezel chrome must be true black #000000")
+    if ".ultraThinMaterial" in theme:
+        err("island chrome must not use gray ultraThinMaterial")
+    if "shoreMorph = Animation.spring" not in theme:
+        err("island morph must stay a spring, not a linear/timing curve")
 
     geometry = read(ROOT / "Shore/Support/ScreenGeometry.swift")
     if "notchHeight" not in geometry or "notchFrame" not in geometry:
@@ -178,15 +188,29 @@ def main() -> int:
     if "hoverSuspended" not in module:
         err("island module must honor hover suspend after collapse")
 
+    chips = read(ROOT / "Shore/Island/LiveChips.swift")
+    if "toggleMute" not in chips:
+        err("volume chip must be a real mute affordance")
+    if "Button(action: onTap)" not in chips:
+        err("live chips must be buttons so they do not collapse the island")
+
     shelf = read(ROOT / "Shore/Island/FileShelf.swift")
     if "onDrop" not in shelf or "onDrag" not in shelf:
         err("file shelf must support drop in and drag out")
+    if "FileDropURLBox" not in shelf and "FileDropCollector" not in shelf:
+        err("file drop collection must use a Sendable box (Swift 6)")
 
     dock = read(ROOT / "Shore/Dock/DockModule.swift")
-    if "ignoresMouseEvents" not in read(ROOT / "Shore/Support/OverlayPanel.swift"):
-        err("overlay panel must support click-through")
-    if "TideLine" not in dock:
-        err("dock tide line missing")
+    if "TideLine" in dock:
+        err("Tide Line must be replaced by the Dock file cove")
+    if "Cove" not in dock or "onDrop" not in dock:
+        err("dock module must be a file cove / drop tray")
+    if "draggingFiles" not in dock:
+        err("cove must appear when a file drag starts")
+    if "dockVisible" not in dock:
+        err("cove must appear when the Dock is revealed")
+    if "hitTest" not in dock:
+        err("cove must hit-test only its chrome so Dock clicks pass around it")
 
     # Originality guardrail — we talk about peers in README, not copy them in code.
     banned = ("Atoll", "BoringNotch", "Boring Notch", "Notchy", "Droppy")

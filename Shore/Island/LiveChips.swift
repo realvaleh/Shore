@@ -41,6 +41,16 @@ final class LiveChipStore: ObservableObject {
         timer = nil
     }
 
+    func toggleMute() {
+        VolumeControl.toggleMute()
+        refresh()
+    }
+
+    func nudgeVolume(_ delta: Double) {
+        VolumeControl.nudge(delta)
+        refresh()
+    }
+
     private func refresh() {
         var next: [LiveChip] = []
         let now = Date()
@@ -84,59 +94,110 @@ final class LiveChipStore: ObservableObject {
 }
 
 struct ChipRow: View {
-    var chips: [LiveChip]
+    @ObservedObject var store: LiveChipStore
     var compact: Bool = false
 
     var body: some View {
         HStack(spacing: compact ? 4 : 6) {
-            ForEach(chips) { chip in
-                LiveChipView(chip: chip, compact: compact)
+            ForEach(store.chips) { chip in
+                LiveChipView(
+                    chip: chip,
+                    compact: compact,
+                    onTap: {
+                        if chip.kind == .volume {
+                            store.toggleMute()
+                        }
+                    },
+                    onVerticalDrag: chip.kind == .volume
+                        ? { store.nudgeVolume($0) }
+                        : nil
+                )
             }
         }
+        // Chips own their clicks so they never collapse / pin the island.
+        .buttonStyle(.plain)
     }
 }
 
 struct LiveChipView: View {
     var chip: LiveChip
     var compact: Bool = false
+    var onTap: () -> Void
+    var onVerticalDrag: ((Double) -> Void)?
+
+    @State private var lastDrag: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: chip.symbol)
-                .font(.system(size: 9, weight: .semibold))
-            Text(chip.label)
-                .font(ShoreType.chip())
-                .monospacedDigit()
-                .fixedSize(horizontal: true, vertical: false)
-                .opacity(compact ? 0 : 1)
-                .frame(width: compact ? 0 : nil, alignment: .leading)
-                .clipped()
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Image(systemName: chip.symbol)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(chip.label)
+                    .font(ShoreType.chip())
+                    .monospacedDigit()
+                    .fixedSize(horizontal: true, vertical: false)
+                    .opacity(compact ? 0 : 1)
+                    .frame(width: compact ? 0 : nil, alignment: .leading)
+                    .clipped()
+            }
+            .foregroundStyle(ShorePalette.foam.opacity(chip.emphasized ? 1 : 0.86))
+            .padding(.horizontal, compact ? 6 : 7)
+            .padding(.vertical, 3)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .fill(ShorePalette.seaGlass.opacity(chip.progress * 0.18))
+                    }
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.white.opacity(chip.emphasized ? 0.22 : 0.08), lineWidth: 0.6)
+                    }
+            }
         }
-        .foregroundStyle(ShorePalette.foam.opacity(chip.emphasized ? 1 : 0.86))
-        .padding(.horizontal, compact ? 6 : 7)
-        .padding(.vertical, 3)
-        .background {
-            Capsule(style: .continuous)
-                .fill(ShorePalette.inkLift.opacity(0.92))
-                .overlay {
-                    Capsule(style: .continuous)
-                        .fill(ShorePalette.seaGlass.opacity(chip.progress * 0.22))
-                }
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(chip.emphasized ? 0.28 : 0.10), lineWidth: 0.6)
-                }
-        }
-        .help(chip.label)
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .help(helpText)
         .scaleEffect(chip.emphasized ? 1.04 : 1)
         .animation(.shoreFoam, value: chip.emphasized)
+        .simultaneousGesture(volumeDrag)
         .accessibilityLabel(accessibilityText)
+        .accessibilityHint(accessibilityHint)
+        .accessibilityAddTraits(chip.kind == .volume ? .isButton : [])
+    }
+
+    private var volumeDrag: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard let onVerticalDrag else { return }
+                let delta = Double(lastDrag - value.translation.height) / 140
+                lastDrag = value.translation.height
+                if abs(delta) > 0.0005 {
+                    onVerticalDrag(delta)
+                }
+            }
+            .onEnded { _ in lastDrag = 0 }
+    }
+
+    private var helpText: String {
+        switch chip.kind {
+        case .battery: "Battery \(chip.label) — live reading"
+        case .volume: "Click to mute or unmute. Drag vertically to change volume."
+        }
     }
 
     private var accessibilityText: String {
         switch chip.kind {
         case .battery: "Battery \(chip.label)"
         case .volume: "Volume \(chip.label)"
+        }
+    }
+
+    private var accessibilityHint: String {
+        switch chip.kind {
+        case .battery: "Display only. Does not collapse the island."
+        case .volume: "Toggles mute. Does not collapse the island."
         }
     }
 }
@@ -224,6 +285,68 @@ private struct VolumeReading {
         return VolumeReading(
             level: min(1, max(0, Double(volume))),
             muted: muteStatus == noErr && muted != 0
+        )
+    }
+}
+
+private enum VolumeControl {
+    static func toggleMute() {
+        guard let device = defaultOutputDevice() else { return }
+        var address = outputAddress(kAudioDevicePropertyMute)
+        var muted: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &muted)
+        if status == noErr {
+            var next: UInt32 = muted == 0 ? 1 : 0
+            _ = AudioObjectSetPropertyData(device, &address, 0, nil, size, &next)
+            return
+        }
+        if let reading = VolumeReading.current() {
+            setLevel(reading.muted || reading.level <= 0.001 ? 0.5 : 0)
+        }
+    }
+
+    static func nudge(_ delta: Double) {
+        guard let reading = VolumeReading.current() else { return }
+        if reading.muted, delta > 0 {
+            toggleMute()
+        }
+        setLevel(reading.level + delta)
+    }
+
+    static func setLevel(_ value: Double) {
+        guard let device = defaultOutputDevice() else { return }
+        var address = outputAddress(kAudioDevicePropertyVolumeScalar)
+        var volume = Float32(Swift.min(1, Swift.max(0, value)))
+        var size = UInt32(MemoryLayout<Float32>.size)
+        var status = AudioObjectSetPropertyData(device, &address, 0, nil, size, &volume)
+        if status != noErr {
+            address.mElement = 1
+            status = AudioObjectSetPropertyData(device, &address, 0, nil, size, &volume)
+        }
+        _ = status
+    }
+
+    private static func defaultOutputDevice() -> AudioDeviceID? {
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &device) == noErr, device != 0 else {
+            return nil
+        }
+        return device
+    }
+
+    private static func outputAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
         )
     }
 }
