@@ -7,11 +7,13 @@ import SwiftUI
 final class DockModule {
     private let panel: OverlayPanel
     private let host: NSHostingController<TideLineView>
-    private let model = TideLineModel()
+    private let model: TideLineModel
     private var screenObserver: NSObjectProtocol?
     private var mouseTimer: Timer?
 
     init() {
+        let model = TideLineModel()
+        self.model = model
         let screen = ScreenGeometry.primary
         let size = Self.panelSize(on: screen)
         host = NSHostingController(rootView: TideLineView(model: model))

@@ -31,6 +31,8 @@ def main() -> int:
             err("bundle id missing")
         if "isa = PBXNativeTarget" not in pbx:
             err("native app target missing")
+        if "SWIFT_VERSION = 6.0" not in pbx:
+            err("pbxproj must use Swift 6 language mode")
         refs = re.findall(r"path = ([^;]+); sourceTree = \"<group>\";", pbx)
         for rel in refs:
             rel = rel.strip()
@@ -86,7 +88,9 @@ def main() -> int:
         "Notarization",
         "MediaRemote",
         "macOS 14",
-        "this PR is source",
+        "GitHub Releases",
+        "Shore-*.dmg",
+        "right-click",
     ]:
         if needle.lower() not in readme.lower():
             err(f"README missing section/mention: {needle}")
@@ -94,10 +98,38 @@ def main() -> int:
     settings = read(ROOT / "Shore/App/ShoreSettings.swift")
     if "islandEnabled" not in settings or "dockEnabled" not in settings:
         err("settings toggles missing")
+    if "@MainActor" not in settings:
+        err("ShoreSettings must be MainActor-isolated")
+    if "static let shared" not in settings:
+        err("ShoreSettings.shared missing")
+
+    runtime = read(ROOT / "Shore/App/ShoreRuntime.swift")
+    if re.search(r"private let settings\s*=\s*ShoreSettings\.shared", runtime):
+        err("ShoreRuntime must assign ShoreSettings.shared inside init, not a property default")
+    if "NowPlayingStore(settings:" not in runtime:
+        err("NowPlayingStore must receive ShoreSettings from a MainActor init")
 
     now_playing = read(ROOT / "Shore/Island/NowPlaying.swift")
     if "MediaRemote" not in now_playing or "sample" not in now_playing.lower():
         err("now-playing must include MediaRemote + sample fallback")
+    if re.search(r"init\(settings:\s*ShoreSettings\s*=\s*\.shared\)", now_playing):
+        err("do not use MainActor ShoreSettings.shared as a default argument")
+    if re.search(r"func load\s*<", now_playing) and "init()" in now_playing:
+        err("MediaRemote init must not nest load() that captures self")
+    if "dlsym" not in now_playing:
+        err("MediaRemote loader must resolve symbols via dlsym")
+
+    icon_manifest = read(
+        ROOT / "Shore/Assets.xcassets/AppIcon.appiconset/Contents.json"
+    )
+    if "AppIcon-1024.png" not in icon_manifest or "1024x1024" not in icon_manifest:
+        err("AppIcon Contents.json must assign the 1024x1024 image")
+
+    dmg = read(ROOT / "scripts/package-dmg.sh")
+    if "dist" not in dmg or "xcodebuild" not in dmg or "Release" not in dmg:
+        err("package-dmg.sh must build Release into dist/")
+    if "Shore-" not in dmg or ".dmg" not in dmg:
+        err("package-dmg.sh must write dist/Shore-*.dmg")
 
     island = read(ROOT / "Shore/Island/IslandViews.swift")
     if "isExpanded" not in island:

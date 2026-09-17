@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class IslandModule {
-    private let session = IslandSession()
+    private let session: IslandSession
     private let nowPlaying: NowPlayingStore
     private let chips: LiveChipStore
     private let panel: OverlayPanel
@@ -14,6 +14,8 @@ final class IslandModule {
     private var screenObserver: NSObjectProtocol?
 
     init(nowPlaying: NowPlayingStore, chips: LiveChipStore) {
+        let session = IslandSession()
+        self.session = session
         self.nowPlaying = nowPlaying
         self.chips = chips
 
@@ -48,7 +50,9 @@ final class IslandModule {
         expandCancellable = session.$isExpanded
             .removeDuplicates()
             .sink { [weak self] expanded in
-                self?.layout(expanded: expanded, animated: true)
+                Task { @MainActor in
+                    self?.layout(expanded: expanded, animated: true)
+                }
             }
 
         screenObserver = NotificationCenter.default.addObserver(
@@ -62,11 +66,15 @@ final class IslandModule {
         }
 
         let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            self?.collapseIfOutside()
+            Task { @MainActor in
+                self?.collapseIfOutside()
+            }
             return event
         }
         let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.collapseIfOutside()
+            Task { @MainActor in
+                self?.collapseIfOutside()
+            }
         }
         if let local { monitors.append(local) }
         if let global { monitors.append(global) }
@@ -82,9 +90,12 @@ final class IslandModule {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             panel.animator().alphaValue = 0
-        } completionHandler: { [panel] in
-            panel.orderOut(nil)
-            panel.close()
+        } completionHandler: { [weak self] in
+            Task { @MainActor in
+                guard let panel = self?.panel else { return }
+                panel.orderOut(nil)
+                panel.close()
+            }
         }
     }
 

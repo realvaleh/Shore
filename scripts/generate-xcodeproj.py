@@ -130,8 +130,8 @@ target_settings = {
     "SDKROOT": "macosx",
     "SUPPORTED_PLATFORMS": "macosx",
     "SWIFT_EMIT_LOC_STRINGS": "YES",
-    "SWIFT_STRICT_CONCURRENCY": "targeted",
-    "SWIFT_VERSION": "5.0",
+    "SWIFT_STRICT_CONCURRENCY": "complete",
+    "SWIFT_VERSION": "6.0",
 }
 
 objects = []
@@ -388,21 +388,6 @@ def xcconfig(oid, name, extra):
 		}};"""
 
 
-def xcconfig_target(oid, name, extra_sign=None):
-    merged = dict(target_settings)
-    if extra_sign:
-        merged.update(extra_sign)
-    body = "\n".join(f"\t\t\t\t{k} = {v};" for k, v in merged.items())
-    return f"""\t\t{oid} /* {name} */ = {{
- mar			isa = XCBuildConfiguration;
-			buildSettings = {{
-{body}
-			}};
-			name = {name};
-		}};"""
-
-
-# fix typo - I accidentally put " mar" in the template. Let me write it correctly.
 def xcconfig_target(oid, name):
     body = "\n".join(f"\t\t\t\t{k} = {v};" for k, v in target_settings.items())
     return f"""\t\t{oid} /* {name} */ = {{

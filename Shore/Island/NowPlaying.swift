@@ -3,7 +3,7 @@ import Combine
 import Darwin
 import Foundation
 
-struct NowPlayingInfo: Equatable {
+struct NowPlayingInfo: Equatable, @unchecked Sendable {
     var title: String
     var artist: String
     var album: String
@@ -39,13 +39,13 @@ struct NowPlayingInfo: Equatable {
     }
 }
 
-enum NowPlayingSource: Equatable {
+enum NowPlayingSource: Equatable, Sendable {
     case mediaRemote
     case sample
     case idle
 }
 
-enum MediaCommand: UInt32 {
+enum MediaCommand: UInt32, Sendable {
     case play = 0
     case pause = 1
     case togglePlayPause = 2
@@ -59,30 +59,32 @@ final class NowPlayingStore: ObservableObject {
     @Published private(set) var source: NowPlayingSource = .sample
 
     private let settings: ShoreSettings
-    private let remote = MediaRemoteNowPlayingProvider()
+    private let remote: MediaRemoteNowPlayingProvider
     private var timer: Timer?
     private var lastRemote: NowPlayingInfo?
     private var lastRemoteAt = Date.distantPast
     private var cancellable: AnyCancellable?
 
-    init(settings: ShoreSettings = .shared) {
+    /// Isolated `shared` cannot be a default argument (those are nonisolated).
+    init(settings: ShoreSettings) {
         self.settings = settings
+        self.remote = MediaRemoteNowPlayingProvider()
     }
 
     func start() {
         remote.start { [weak self] snapshot in
-            Task { @MainActor in
-                self?.lastRemote = snapshot
-                self?.lastRemoteAt = Date()
-                self?.publish()
-            }
+            self?.lastRemote = snapshot
+            self?.lastRemoteAt = Date()
+            self?.publish()
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
         RunLoop.main.add(timer!, forMode: .common)
         cancellable = settings.$sampleWhenIdle
-            .sink { [weak self] _ in self?.publish() }
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.publish() }
+            }
         publish()
     }
 
@@ -153,6 +155,7 @@ final class NowPlayingStore: ObservableObject {
 }
 
 /// Best-effort MediaRemote client. Missing symbols or empty now-playing fall through to sample/idle.
+@MainActor
 final class MediaRemoteNowPlayingProvider {
     private typealias RegisterFn = @convention(c) (DispatchQueue) -> Void
     private typealias UnregisterFn = @convention(c) () -> Void
@@ -168,26 +171,28 @@ final class MediaRemoteNowPlayingProvider {
     private let getInfo: GetInfoFn?
     private let sendCommand: SendFn?
     private var observer: NSObjectProtocol?
-    private var handler: ((NowPlayingInfo?) -> Void)?
+    private var handler: (@MainActor (NowPlayingInfo?) -> Void)?
 
     var isAvailable: Bool { handle != nil && getInfo != nil }
 
     init() {
-        handle = dlopen(
+        let opened = dlopen(
             "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote",
             RTLD_LAZY
         )
-        func load<T>(_ name: String, as type: T.Type) -> T? {
-            guard let handle, let symbol = dlsym(handle, name) else { return nil }
-            return unsafeBitCast(symbol, to: T.self)
-        }
-        register = load("MRMediaRemoteRegisterForNowPlayingNotifications", as: RegisterFn.self)
-        unregister = load("MRMediaRemoteUnregisterForNowPlayingNotifications", as: UnregisterFn.self)
-        getInfo = load("MRMediaRemoteGetNowPlayingInfo", as: GetInfoFn.self)
-        sendCommand = load("MRMediaRemoteSendCommand", as: SendFn.self)
+        let resolvedRegister = Self.symbol(opened, "MRMediaRemoteRegisterForNowPlayingNotifications", as: RegisterFn.self)
+        let resolvedUnregister = Self.symbol(opened, "MRMediaRemoteUnregisterForNowPlayingNotifications", as: UnregisterFn.self)
+        let resolvedGetInfo = Self.symbol(opened, "MRMediaRemoteGetNowPlayingInfo", as: GetInfoFn.self)
+        let resolvedSend = Self.symbol(opened, "MRMediaRemoteSendCommand", as: SendFn.self)
+
+        handle = opened
+        register = resolvedRegister
+        unregister = resolvedUnregister
+        getInfo = resolvedGetInfo
+        sendCommand = resolvedSend
     }
 
-    func start(handler: @escaping (NowPlayingInfo?) -> Void) {
+    func start(handler: @escaping @MainActor (NowPlayingInfo?) -> Void) {
         self.handler = handler
         guard isAvailable else {
             handler(nil)
@@ -199,7 +204,9 @@ final class MediaRemoteNowPlayingProvider {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refresh()
+            Task { @MainActor in
+                self?.refresh()
+            }
         }
         refresh()
     }
@@ -216,7 +223,9 @@ final class MediaRemoteNowPlayingProvider {
     func send(_ command: MediaCommand) {
         _ = sendCommand?(command.rawValue, nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.refresh()
+            Task { @MainActor in
+                self?.refresh()
+            }
         }
     }
 
@@ -226,36 +235,65 @@ final class MediaRemoteNowPlayingProvider {
             return
         }
         getInfo(DispatchQueue.main) { [weak self] dictionary in
-            self?.handler?(Self.parse(dictionary))
+            let payload = MediaRemoteNowPlayingProvider.payload(dictionary)
+            Task { @MainActor in
+                self?.handler?(payload?.materialize())
+            }
         }
     }
 
-    private static func parse(_ raw: CFDictionary?) -> NowPlayingInfo? {
-        guard let raw = raw as? [String: Any] else { return nil }
+    /// Copy Sendable fields off the C callback so `NSImage` can be built on the main actor.
+    nonisolated private static func payload(_ raw: CFDictionary?) -> RemotePayload? {
+        guard let raw = raw as NSDictionary? else { return nil }
         let title = string(raw, "kMRMediaRemoteNowPlayingInfoTitle")
         let artist = string(raw, "kMRMediaRemoteNowPlayingInfoArtist")
         guard !title.isEmpty || !artist.isEmpty else { return nil }
         let rate = number(raw, "kMRMediaRemoteNowPlayingInfoPlaybackRate") ?? 0
-        var image: NSImage?
-        if let data = raw["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data {
-            image = NSImage(data: data)
-        }
-        return NowPlayingInfo(
+        return RemotePayload(
             title: title.isEmpty ? "Now Playing" : title,
             artist: artist,
             album: string(raw, "kMRMediaRemoteNowPlayingInfoAlbum"),
             isPlaying: rate > 0,
             elapsed: number(raw, "kMRMediaRemoteNowPlayingInfoElapsedTime") ?? 0,
             duration: number(raw, "kMRMediaRemoteNowPlayingInfoDuration") ?? 0,
-            artwork: image
+            artworkData: raw["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data
         )
     }
 
-    private static func string(_ dict: [String: Any], _ key: String) -> String {
+    nonisolated private static func string(_ dict: NSDictionary, _ key: String) -> String {
         dict[key] as? String ?? ""
     }
 
-    private static func number(_ dict: [String: Any], _ key: String) -> Double? {
+    nonisolated private static func number(_ dict: NSDictionary, _ key: String) -> Double? {
         (dict[key] as? NSNumber)?.doubleValue
+    }
+
+    /// Resolve a dlsym pointer without touching `self` (nested helpers in `init` capture the instance).
+    nonisolated private static func symbol<T>(_ handle: UnsafeMutableRawPointer?, _ name: String, as type: T.Type) -> T? {
+        guard let handle, let pointer = dlsym(handle, name) else { return nil }
+        return unsafeBitCast(pointer, to: T.self)
+    }
+}
+
+private struct RemotePayload: Sendable {
+    var title: String
+    var artist: String
+    var album: String
+    var isPlaying: Bool
+    var elapsed: TimeInterval
+    var duration: TimeInterval
+    var artworkData: Data?
+
+    @MainActor
+    func materialize() -> NowPlayingInfo {
+        NowPlayingInfo(
+            title: title,
+            artist: artist,
+            album: album,
+            isPlaying: isPlaying,
+            elapsed: elapsed,
+            duration: duration,
+            artwork: artworkData.flatMap(NSImage.init(data:))
+        )
     }
 }

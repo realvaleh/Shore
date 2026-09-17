@@ -25,3 +25,7 @@ xcuserdata/
 # Packaging output
 dist/
 *.app
+
+# Python
+__pycache__/
+*.py[cod]

@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 enum ScreenGeometry {
     static var primary: NSScreen {
         NSScreen.main ?? NSScreen.screens[0]
@@ -29,6 +30,7 @@ enum ScreenGeometry {
     }
 }
 
+@MainActor
 enum IslandPlacement {
     static func collapsedWidth(on screen: NSScreen) -> CGFloat {
         if let notch = ScreenGeometry.notchWidth(on: screen) {
