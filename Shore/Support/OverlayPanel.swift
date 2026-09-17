@@ -62,6 +62,7 @@ final class IslandHost: NSHostingController<IslandRootView> {
 @MainActor
 final class IslandSurfaceView: NSView {
     var chromeRectInView: () -> NSRect = { .zero }
+    var chromeContains: ((NSPoint) -> Bool)?
     var onPointerChange: () -> Void = {}
 
     override var isFlipped: Bool { false }
@@ -70,8 +71,13 @@ final class IslandSurfaceView: NSView {
     override var safeAreaInsets: NSEdgeInsets { NSEdgeInsets() }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let chrome = chromeRectInView()
-        guard chrome.contains(point) else { return nil }
+        let hits: Bool
+        if let chromeContains {
+            hits = chromeContains(point)
+        } else {
+            hits = chromeRectInView().contains(point)
+        }
+        guard hits else { return nil }
         return super.hitTest(point)
     }
 

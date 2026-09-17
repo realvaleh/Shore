@@ -62,6 +62,19 @@ final class IslandModule {
             guard let self else { return .zero }
             return IslandPlacement.chromeRect(in: self.surface.bounds, size: self.currentChromeSize())
         }
+        surface.chromeContains = { [weak self] point in
+            guard let self else { return false }
+            let size = self.currentChromeSize()
+            let chrome = IslandPlacement.chromeRect(in: self.surface.bounds, size: size)
+            let shape = IslandBlendShape.island(
+                hugsNotch: self.session.hugsNotch,
+                notchWidth: self.session.notchWidth,
+                notchHeight: self.session.notchHeight,
+                pinned: self.session.isPinned,
+                hovering: self.session.isHovering
+            )
+            return shape.contains(viewPoint: point, chromeRect: chrome)
+        }
         surface.onPointerChange = { [weak self] in
             self?.considerMouse(NSEvent.mouseLocation)
         }

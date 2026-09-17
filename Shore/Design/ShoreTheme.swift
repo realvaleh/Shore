@@ -16,17 +16,35 @@ enum IslandMetrics {
     static let collapsedHeight: CGFloat = 36
     static let collapsedMinWidth: CGFloat = 220
     static let compactWidth: CGFloat = 348
-    static let compactLip: CGFloat = 50
+    /// Tall enough that compact is a pill the stem can melt into, not a T-bar.
+    static let compactLip: CGFloat = 68
     static let expandedSize = CGSize(width: 428, height: 176)
     static let expandedLip: CGFloat = 168
     static let floatingGap: CGFloat = 8
     static let shelfHeight: CGFloat = 58
-    static let blendRadius: CGFloat = 22
-    static let invertedRadius: CGFloat = 11
+    static let restCornerRadius: CGFloat = 18
+    static let compactCornerRadius: CGFloat = 28
+    static let pinnedCornerRadius: CGFloat = 32
+    static let compactEarRadius: CGFloat = 40
+    static let pinnedEarRadius: CGFloat = 44
+    static let blendRadius: CGFloat = pinnedCornerRadius
+    static let invertedRadius: CGFloat = pinnedEarRadius
     static let hoverSlopEnter: CGFloat = 16
     static let hoverSlopStay: CGFloat = 24
     static let notchHeightFallback: CGFloat = 32
     static let bezelFlushNudge: CGFloat = 1
+
+    static func cornerRadius(pinned: Bool, hovering: Bool) -> CGFloat {
+        if pinned { return pinnedCornerRadius }
+        if hovering { return compactCornerRadius }
+        return restCornerRadius
+    }
+
+    static func earRadius(pinned: Bool, hovering: Bool) -> CGFloat {
+        if pinned { return pinnedEarRadius }
+        if hovering { return compactEarRadius }
+        return compactEarRadius * 0.6
+    }
 }
 
 extension Animation {
@@ -51,38 +69,66 @@ enum ShoreType {
     }
 }
 
-/// Chrome that grows out of a hardware notch.
-/// Square against the camera housing; concave shoulders where the lip meets the notch;
-/// rounded only on the edge that faces the desktop.
+/// One continuous island silhouette that morphs collapsed → compact → expanded.
+///
+/// Not a T of two rectangles. Control points of a single path family animate:
+/// neck width/height, body size (the rect), bottom corner radii, and ear radii.
+/// Collapsed (wing ≈ 0): flush to the top bezel, heavily rounded bottom (capsule).
+/// Compact / pinned: stem follows the hardware notch, then a cubic S-curve ear
+/// consumes the whole wing (concave then convex, no horizontal shoulder), then
+/// large squircle bottom corners. No 90° exterior corner on the desktop lip.
 struct IslandBlendShape: InsettableShape {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
     var cornerRadius: CGFloat
-    var invertedRadius: CGFloat
+    var earRadius: CGFloat
+    var flushTop: Bool
     var insetAmount: CGFloat = 0
+
+    /// Alias used by older metrics; ears are `earRadius`.
+    var invertedRadius: CGFloat {
+        get { earRadius }
+        set { earRadius = newValue }
+    }
+
+    static func island(
+        hugsNotch: Bool,
+        notchWidth: CGFloat,
+        notchHeight: CGFloat,
+        pinned: Bool,
+        hovering: Bool
+    ) -> IslandBlendShape {
+        IslandBlendShape(
+            notchWidth: hugsNotch ? notchWidth : 0,
+            notchHeight: hugsNotch ? notchHeight : 0,
+            cornerRadius: IslandMetrics.cornerRadius(pinned: pinned, hovering: hovering),
+            earRadius: IslandMetrics.earRadius(pinned: pinned, hovering: hovering),
+            flushTop: hugsNotch
+        )
+    }
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get {
             AnimatablePair(
                 AnimatablePair(notchWidth, notchHeight),
-                AnimatablePair(cornerRadius, invertedRadius)
+                AnimatablePair(cornerRadius, earRadius)
             )
         }
         set {
             notchWidth = newValue.first.first
             notchHeight = newValue.first.second
             cornerRadius = newValue.second.first
-            invertedRadius = newValue.second.second
+            earRadius = newValue.second.second
         }
     }
 
     func path(in rect: CGRect) -> Path {
-        lipPath(in: rect, includeNotchTop: true)
+        silhouettePath(in: rect, includeTop: true)
     }
 
-    /// Stroke the lip only — skipping the housing edge so a highlight cannot read as a seam.
+    /// Stroke the desktop lip only — skipping the housing edge so a highlight cannot read as a seam.
     func lipStrokePath(in rect: CGRect) -> Path {
-        lipPath(in: rect, includeNotchTop: false)
+        silhouettePath(in: rect, includeTop: false)
     }
 
     func inset(by amount: CGFloat) -> IslandBlendShape {
@@ -91,9 +137,26 @@ struct IslandBlendShape: InsettableShape {
         return copy
     }
 
-    private func lipPath(in rect: CGRect, includeNotchTop: Bool) -> Path {
+    /// AppKit (y-up) point vs chrome rect in the same view. Path math is SwiftUI y-down.
+    func contains(viewPoint: CGPoint, chromeRect: CGRect) -> Bool {
+        guard chromeRect.width > 1, chromeRect.height > 1, chromeRect.contains(viewPoint) else {
+            return false
+        }
+        let local = CGPoint(
+            x: viewPoint.x - chromeRect.minX,
+            y: chromeRect.maxY - viewPoint.y
+        )
+        return path(in: CGRect(origin: .zero, size: chromeRect.size)).contains(local)
+    }
+
+    private func silhouettePath(in rect: CGRect, includeTop: Bool) -> Path {
         let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
         guard rect.width > 1, rect.height > 1 else { return Path() }
+
+        // Floating displays: one continuous pill, all four corners rounded.
+        if !flushTop || notchWidth < 1 {
+            return roundedRectPath(in: rect, includeTop: includeTop)
+        }
 
         let nW = min(max(0, notchWidth), rect.width)
         let nH = min(max(0, notchHeight), rect.height)
@@ -101,133 +164,184 @@ struct IslandBlendShape: InsettableShape {
         let nR = nL + nW
         let wing = max(0, (rect.width - nW) / 2)
         let lip = max(0, rect.height - nH)
-        let ir = min(invertedRadius, wing * 0.55, lip * 0.45)
-        let r = min(cornerRadius, rect.width / 2, max(lip, rect.height) / 2)
+        let squircle: CGFloat = 0.62
+        let earK: CGFloat = 0.58
+
+        // Same path family at every stage. Rest (wing/lip → 0) degenerates to a
+        // flush-top capsule: S-curve length 0, bottom radius ≈ half height.
+        let restLike = wing < 1.5 || lip < 2
+        var bottomR = min(
+            restLike ? max(cornerRadius, rect.height * 0.48) : max(cornerRadius, min(lip * 0.36, 36)),
+            rect.width / 2,
+            rect.height / 2
+        )
+
+        let yFlare0: CGFloat
+        let yFlare1: CGFloat
+        if restLike {
+            yFlare0 = rect.maxY - bottomR
+            yFlare1 = yFlare0
+        } else {
+            let stem = min(nH * 0.58, max(8, nH - 8))
+            yFlare0 = rect.minY + stem
+            let flareH = min(
+                max(earRadius, 22),
+                46,
+                lip * 0.62,
+                max(8, rect.maxY - bottomR - yFlare0)
+            )
+            var flareEnd = yFlare0 + flareH
+            if flareEnd > rect.maxY - 8 {
+                flareEnd = rect.maxY - 8
+            }
+            yFlare1 = flareEnd
+            bottomR = min(bottomR, max(12, rect.maxY - yFlare1))
+        }
+        let dy = max(0, yFlare1 - yFlare0)
 
         var path = Path()
-
-        if wing < 0.75 || lip < 0.75 {
-            if includeNotchTop {
-                path.addRect(rect)
-            } else {
-                path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-            }
-            return path
-        }
-
-        if includeNotchTop {
+        if includeTop {
             path.move(to: CGPoint(x: nL, y: rect.minY))
             path.addLine(to: CGPoint(x: nR, y: rect.minY))
         } else {
             path.move(to: CGPoint(x: nR, y: rect.minY))
         }
-
-        path.addLine(to: CGPoint(x: nR, y: nH - ir))
-        path.addQuadCurve(
-            to: CGPoint(x: nR + ir, y: nH),
-            control: CGPoint(x: nR, y: nH)
+        path.addLine(to: CGPoint(x: nR, y: yFlare0))
+        path.addCurve(
+            to: CGPoint(x: rect.maxX, y: yFlare1),
+            control1: CGPoint(x: nR, y: yFlare0 + earK * dy),
+            control2: CGPoint(x: rect.maxX, y: yFlare1 - earK * dy)
         )
-        path.addLine(to: CGPoint(x: rect.maxX - r, y: nH))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: nH + r),
-            control: CGPoint(x: rect.maxX, y: nH)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomR))
+        addCorner(
+            &path,
+            from: CGPoint(x: rect.maxX, y: rect.maxY - bottomR),
+            corner: CGPoint(x: rect.maxX, y: rect.maxY),
+            to: CGPoint(x: rect.maxX - bottomR, y: rect.maxY),
+            kappa: squircle
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - r, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        path.addLine(to: CGPoint(x: rect.minX + bottomR, y: rect.maxY))
+        addCorner(
+            &path,
+            from: CGPoint(x: rect.minX + bottomR, y: rect.maxY),
+            corner: CGPoint(x: rect.minX, y: rect.maxY),
+            to: CGPoint(x: rect.minX, y: rect.maxY - bottomR),
+            kappa: squircle
         )
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - r),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX, y: nH + r))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + r, y: nH),
-            control: CGPoint(x: rect.minX, y: nH)
-        )
-        path.addLine(to: CGPoint(x: nL - ir, y: nH))
-        path.addQuadCurve(
-            to: CGPoint(x: nL, y: nH - ir),
-            control: CGPoint(x: nL, y: nH)
+        path.addLine(to: CGPoint(x: rect.minX, y: yFlare1))
+        path.addCurve(
+            to: CGPoint(x: nL, y: yFlare0),
+            control1: CGPoint(x: rect.minX, y: yFlare1 - earK * dy),
+            control2: CGPoint(x: nL, y: yFlare0 + earK * dy)
         )
         path.addLine(to: CGPoint(x: nL, y: rect.minY))
-        if includeNotchTop {
+        if includeTop { path.closeSubpath() }
+        return path
+    }
+
+    private func roundedRectPath(in rect: CGRect, includeTop: Bool) -> Path {
+        let r = min(max(cornerRadius, min(rect.height, rect.width) * 0.36), rect.width / 2, rect.height / 2)
+        let k: CGFloat = 0.62
+        var path = Path()
+        if includeTop {
+            path.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+            addCorner(
+                &path,
+                from: CGPoint(x: rect.maxX - r, y: rect.minY),
+                corner: CGPoint(x: rect.maxX, y: rect.minY),
+                to: CGPoint(x: rect.maxX, y: rect.minY + r),
+                kappa: k
+            )
+        } else {
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY + r))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        addCorner(
+            &path,
+            from: CGPoint(x: rect.maxX, y: rect.maxY - r),
+            corner: CGPoint(x: rect.maxX, y: rect.maxY),
+            to: CGPoint(x: rect.maxX - r, y: rect.maxY),
+            kappa: k
+        )
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        addCorner(
+            &path,
+            from: CGPoint(x: rect.minX + r, y: rect.maxY),
+            corner: CGPoint(x: rect.minX, y: rect.maxY),
+            to: CGPoint(x: rect.minX, y: rect.maxY - r),
+            kappa: k
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        if includeTop {
+            addCorner(
+                &path,
+                from: CGPoint(x: rect.minX, y: rect.minY + r),
+                corner: CGPoint(x: rect.minX, y: rect.minY),
+                to: CGPoint(x: rect.minX + r, y: rect.minY),
+                kappa: k
+            )
             path.closeSubpath()
         }
         return path
+    }
+
+    private func addCorner(
+        _ path: inout Path,
+        from start: CGPoint,
+        corner: CGPoint,
+        to end: CGPoint,
+        kappa: CGFloat
+    ) {
+        path.addCurve(
+            to: end,
+            control1: CGPoint(
+                x: start.x + (corner.x - start.x) * kappa,
+                y: start.y + (corner.y - start.y) * kappa
+            ),
+            control2: CGPoint(
+                x: end.x + (corner.x - end.x) * kappa,
+                y: end.y + (corner.y - end.y) * kappa
+            )
+        )
     }
 }
 
 struct IslandChrome: View {
     var hugsNotch: Bool
-    var notchWidth: CGFloat
-    var notchHeight: CGFloat
-    var expanded: Bool
-
-    private var radius: CGFloat { expanded ? IslandMetrics.blendRadius : 16 }
+    var shape: IslandBlendShape
 
     var body: some View {
-        Group {
-            if hugsNotch {
-                IslandBlendShape(
-                    notchWidth: notchWidth,
-                    notchHeight: notchHeight,
-                    cornerRadius: radius,
-                    invertedRadius: IslandMetrics.invertedRadius
-                )
-                .fill(ShorePalette.bezel)
-            } else {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(ShorePalette.bezel)
-            }
-        }
-        .overlay { edgeLight }
-        .shadow(
-            color: ShorePalette.bezel.opacity(hugsNotch ? 0 : 0.45),
-            radius: hugsNotch ? 0 : 16,
-            y: hugsNotch ? 0 : 8
-        )
+        shape
+            .fill(ShorePalette.bezel)
+            .overlay { edgeLight }
+            .shadow(
+                color: ShorePalette.bezel.opacity(hugsNotch ? 0 : 0.45),
+                radius: hugsNotch ? 0 : 16,
+                y: hugsNotch ? 0 : 8
+            )
     }
 
     @ViewBuilder
     private var edgeLight: some View {
         // Hairline on the desktop lip only. No gray halo, no material fringe,
         // and never a stroke on the housing edge (that would read as a seam).
-        if hugsNotch {
-            NotchLipStroke(
-                notchWidth: notchWidth,
-                notchHeight: notchHeight,
-                cornerRadius: radius,
-                invertedRadius: IslandMetrics.invertedRadius
-            )
-            .stroke(Color.white.opacity(0.05), lineWidth: 0.6)
-        } else {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.6)
-        }
+        NotchLipStroke(shape: shape)
+            .stroke(Color.white.opacity(hugsNotch ? 0.05 : 0.06), lineWidth: 0.6)
     }
 }
 
 /// Stroke that follows IslandBlendShape but never draws the housing edge.
 private struct NotchLipStroke: Shape {
-    var notchWidth: CGFloat
-    var notchHeight: CGFloat
-    var cornerRadius: CGFloat
-    var invertedRadius: CGFloat
+    var shape: IslandBlendShape
+
+    var animatableData: IslandBlendShape.AnimatableData {
+        get { shape.animatableData }
+        set { shape.animatableData = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
-        IslandBlendShape(
-            notchWidth: notchWidth,
-            notchHeight: notchHeight,
-            cornerRadius: cornerRadius,
-            invertedRadius: invertedRadius
-        )
-        .lipStrokePath(in: rect)
+        shape.lipStrokePath(in: rect)
     }
 }
 

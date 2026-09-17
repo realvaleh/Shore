@@ -68,13 +68,21 @@ struct IslandRootView: View {
 
     private var morph: Animation { reduceMotion ? .shoreQuiet : .shoreMorph }
 
+    private var silhouette: IslandBlendShape {
+        IslandBlendShape.island(
+            hugsNotch: session.hugsNotch,
+            notchWidth: session.notchWidth,
+            notchHeight: session.notchHeight,
+            pinned: session.isPinned,
+            hovering: session.isHovering
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             IslandChrome(
                 hugsNotch: session.hugsNotch,
-                notchWidth: session.notchWidth,
-                notchHeight: session.notchHeight,
-                expanded: stage != .rest
+                shape: silhouette
             )
             IslandCanvas(
                 stage: stage,
@@ -95,19 +103,7 @@ struct IslandRootView: View {
         }
         .frame(width: chromeSize.width, height: chromeSize.height, alignment: .top)
         .mask(alignment: .top) {
-            if session.hugsNotch {
-                IslandBlendShape(
-                    notchWidth: session.notchWidth,
-                    notchHeight: session.notchHeight,
-                    cornerRadius: stage == .pinned ? IslandMetrics.blendRadius : 16,
-                    invertedRadius: IslandMetrics.invertedRadius
-                )
-            } else {
-                RoundedRectangle(
-                    cornerRadius: stage == .pinned ? IslandMetrics.blendRadius : 16,
-                    style: .continuous
-                )
-            }
+            silhouette
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(0)
