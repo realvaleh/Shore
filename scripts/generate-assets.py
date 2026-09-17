@@ -131,25 +131,46 @@ def draw_pill(base, xy, radius, fill=INK, stroke=(255, 255, 255, 40)):
     return Image.alpha_composite(base, overlay)
 
 
+BEZEL = (0, 0, 0, 255)
+
+
+def draw_notch_blend(base, notch, body, radius=18, fill=BEZEL):
+    """One continuous housing: square against the top, rounded only on the desktop lip."""
+    import math
+
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    nx0, _, nx1, nh = notch
+    bx0, _, bx1, by1 = body
+    r = radius
+    ir = min(11, (nx0 - bx0) * 0.4, 14)
+
+    def arc(cx, cy, rad, a0, a1, steps=7):
+        pts = []
+        for i in range(steps + 1):
+            t = math.radians(a0 + (a1 - a0) * i / steps)
+            pts.append((cx + rad * math.cos(t), cy + rad * math.sin(t)))
+        return pts
+
+    pts = [(nx0, 0), (nx1, 0)]
+    pts += arc(nx1 + ir, nh - ir, ir, 180, 90)
+    pts += arc(bx1 - r, nh + r, r, 270, 360)
+    pts += arc(bx1 - r, by1 - r, r, 0, 90)
+    pts += arc(bx0 + r, by1 - r, r, 90, 180)
+    pts += arc(bx0 + r, nh + r, r, 180, 270)
+    pts += arc(nx0 - ir, nh - ir, ir, 90, 0)
+    d.polygon(pts, fill=fill)
+    return Image.alpha_composite(base, overlay)
+
+
 def island_collapsed(path: Path):
     img = Image.new("RGBA", (1280, 720), (18, 20, 22, 255))
     d = ImageDraw.Draw(img)
-    # Menu bar flanking a hardware notch
     d.rectangle((0, 0, 1280, 32), fill=(20, 22, 24, 255))
     d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
     d.text((1180, 8), "100%", font=font(12), fill=(200, 204, 208, 180))
-    # Camera housing — true black, flush with the top bezel
-    d.rectangle((548, 0, 732, 32), fill=(0, 0, 0, 255))
-    # Lip grown FROM the notch (no gap, concave shoulders)
-    lip = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ld = ImageDraw.Draw(lip)
-    # Body below the housing
-    ld.rounded_rectangle((470, 32, 810, 84), radius=18, fill=INK)
-    # Fill the inverted corners so the lip reads as attached, not a floating pill
-    ld.rectangle((548, 24, 732, 40), fill=INK)
-    img = Image.alpha_composite(img, lip)
+    img = draw_notch_blend(img, (548, 0, 732, 32), (470, 32, 810, 86), radius=18)
     d = ImageDraw.Draw(img)
-    d.rectangle((548, 0, 732, 32), fill=(0, 0, 0, 255))
     d.rounded_rectangle((488, 42, 512, 66), radius=6, fill=KELP)
     d.text((522, 42), "Low Tide", font=font(14, True), fill=FOAM)
     d.text((522, 60), "Still Harbor", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
@@ -164,14 +185,8 @@ def island_expanded(path: Path):
     d = ImageDraw.Draw(img)
     d.rectangle((0, 0, 1280, 32), fill=(20, 22, 24, 255))
     d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
-    # Notch housing stays put; body grows from it
-    body = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    bd = ImageDraw.Draw(body)
-    bd.rounded_rectangle((426, 32, 854, 248), radius=22, fill=INK)
-    bd.rectangle((548, 20, 732, 40), fill=INK)
-    img = Image.alpha_composite(img, body)
+    img = draw_notch_blend(img, (548, 0, 732, 32), (426, 32, 854, 250), radius=22)
     d = ImageDraw.Draw(img)
-    d.rectangle((548, 0, 732, 32), fill=(0, 0, 0, 255))
     d.rounded_rectangle((448, 48, 532, 132), radius=14, fill=KELP)
     d.text((548, 52), "Low Tide", font=font(20, True), fill=FOAM)
     d.text((548, 80), "Still Harbor · sample", font=font(13), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
@@ -184,7 +199,6 @@ def island_expanded(path: Path):
     d.text((628, 168), "87%", font=font(10), fill=FOAM)
     d.rounded_rectangle((676, 164, 720, 188), radius=8, fill=INK_LIFT)
     d.text((684, 168), "42", font=font(10), fill=FOAM)
-    # File shelf
     d.rounded_rectangle((448, 204, 832, 236), radius=10, fill=INK_LIFT)
     d.text((460, 212), "Shelf   notes.pdf    shot.png", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 180))
     d.text((40, 660), "Design placeholder · Island expanded from the notch + file shelf", font=font(14), fill=(160, 166, 170, 200))
@@ -215,8 +229,8 @@ def settings(path: Path):
     d.text((460, 154), "Quiet extras for the Mac.", font=font(13), fill=(80, 84, 88, 255))
     d.rounded_rectangle((460, 200, 820, 280), radius=14, fill=(236, 236, 236, 255))
     d.text((478, 214), "Island", font=font(15, True), fill=INK)
-    d.text((478, 238), "Now playing in the notch,", font=font(12), fill=(90, 94, 98, 255))
-    d.text((478, 256), "or a floating pill on other Macs.", font=font(12), fill=(90, 94, 98, 255))
+    d.text((478, 238), "Hugs the hardware notch.", font=font(12), fill=(90, 94, 98, 255))
+    d.text((478, 256), "Hover expands; click pins the player.", font=font(12), fill=(90, 94, 98, 255))
     d.rounded_rectangle((760, 226, 804, 250), radius=12, fill=SEA)
     d.rounded_rectangle((460, 300, 820, 380), radius=14, fill=(236, 236, 236, 255))
     d.text((478, 314), "File shelf", font=font(15, True), fill=INK)
