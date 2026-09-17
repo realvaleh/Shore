@@ -162,44 +162,44 @@ private struct IslandCanvas: View {
         .padding(.bottom, isPinned ? 12 : 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .opacity(showsContent ? 1 : 0)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Pin from chrome / artwork. Chips and the chevron are Buttons
-            // and consume the click so they never collapse the island.
-            if !isPinned { onToggle() }
-        }
         .accessibilityElement(children: showsContent ? .contain : .ignore)
         .accessibilityLabel(showsContent ? accessibilityLabel : "Shore island")
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint(isPinned ? "Collapse the Shore island" : "Expands the Shore island")
+        .accessibilityHint(isPinned ? "Click outside to collapse" : "Expands the Shore island")
     }
 
     private var topRow: some View {
         HStack(alignment: isPinned ? .top : .center, spacing: isPinned ? 14 : 10) {
-            artwork
-            VStack(alignment: .leading, spacing: isPinned ? 4 : 2) {
-                ShoreMarquee(
-                    text: info.hasTrack ? info.title : (isPinned ? "Nothing playing" : "Shore"),
-                    font: ShoreType.title(isPinned ? 16 : 12.5),
-                    color: ShorePalette.foam,
-                    reduceMotion: reduceMotion || isPinned,
-                    lineLimit: isPinned ? 2 : 1
-                )
-                .frame(height: isPinned ? 40 : 16)
-                Text(subtitle)
-                    .font(ShoreType.body(isPinned ? 12 : 10.5))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.58))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .opacity(info.hasTrack || isPinned ? 1 : 0)
-                    .frame(height: info.hasTrack || isPinned ? (isPinned ? 16 : 13) : 0)
+            HStack(alignment: isPinned ? .top : .center, spacing: isPinned ? 14 : 10) {
+                artwork
+                VStack(alignment: .leading, spacing: isPinned ? 4 : 2) {
+                    ShoreMarquee(
+                        text: info.hasTrack ? info.title : (isPinned ? "Nothing playing" : "Shore"),
+                        font: ShoreType.title(isPinned ? 16 : 12.5),
+                        color: ShorePalette.foam,
+                        reduceMotion: reduceMotion || isPinned,
+                        lineLimit: isPinned ? 2 : 1
+                    )
+                    .frame(height: isPinned ? 40 : 16)
+                    Text(subtitle)
+                        .font(ShoreType.body(isPinned ? 12 : 10.5))
+                        .foregroundStyle(ShorePalette.foam.opacity(0.58))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .opacity(info.hasTrack || isPinned ? 1 : 0)
+                        .frame(height: info.hasTrack || isPinned ? (isPinned ? 16 : 13) : 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: isPinned ? 76 : 0, alignment: .topLeading)
+                .layoutPriority(1)
+                TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
+                    .frame(width: extraOpen ? 0 : 16)
+                    .opacity(extraOpen || !info.hasTrack ? 0 : 1)
+                    .clipped()
             }
-            .frame(maxWidth: .infinity, minHeight: isPinned ? 76 : 0, alignment: .topLeading)
-            .layoutPriority(1)
-            TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
-                .frame(width: extraOpen ? 0 : 16)
-                .opacity(extraOpen || !info.hasTrack ? 0 : 1)
-                .clipped()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if !isPinned { onToggle() }
+            }
             ChipRow(store: chips, compact: !isPinned)
             Button(action: onCollapse) {
                 Image(systemName: "chevron.compact.up")
