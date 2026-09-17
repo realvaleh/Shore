@@ -61,7 +61,7 @@ Shore.app (SwiftUI, macOS 14+, Swift 6)
 
 | Module | Behavior |
 | --- | --- |
-| Island | Resting chrome is flush to the hardware notch (`#000000`, no gray fill, no material halo). Hover morphs one elastic lip from the housing — same snappy spring in and out, not a cross-fade. Click pins the player. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves, so it does not bounce back open. Volume chip mutes; battery chip is a live reading and does not dismiss the island. Titles marquee instead of clipping. Transparent panel wings stay click-through. |
+| Island | Resting chrome is a capsule that engulfs the hardware notch (`#000000`, rounded bottom, no gray fill). Hover morphs **one** organic silhouette out of the bezel — cubic S-curve ears, not a T of two rectangles — with the same snappy spring in and out. Click pins the player. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Volume chip mutes; battery is a live reading and does not dismiss the island. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
 | File shelf | Optional island tray. Drop files to park them, drag tokens back out. Shares the hold with Dock Cove. Independent settings toggle. |
 | Dock Cove | Replaces the old Tide Line. A true-black tray above a **bottom** Dock: drop files here, retrieve later. Springs open when the Dock is revealed or a file drag starts. Hit-tests only its chrome so Dock icons stay clickable. Hidden when the Dock is on a side, unless a drag is in flight. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
@@ -72,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island uses one elastic shape morph for expand and collapse (Reduce Motion shortens it and stills the waveform).
+Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one continuous organic silhouette (capsule at rest; cubic S-curve ears when it grows) that springs between collapsed, compact, and expanded. Reduce Motion shortens the morph and stills the waveform.
 
 Design placeholders (not live Mac screenshots):
 

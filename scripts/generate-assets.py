@@ -17,6 +17,7 @@ KELP = (61, 90, 84, 255)
 SAND = (196, 184, 165, 255)
 BEZEL = (0, 0, 0, 255)
 DESK = (18, 20, 22, 255)
+DESK_LIP = (196, 202, 208, 255)  # light desktop so the black silhouette reads
 
 
 def rounded_rect(draw, xy, radius, fill, outline=None, width=1):
@@ -133,58 +134,95 @@ def draw_pill(base, xy, radius, fill=INK, stroke=(255, 255, 255, 40)):
     return Image.alpha_composite(base, overlay)
 
 
-def draw_notch_blend(base, notch, body, radius=18, fill=BEZEL):
-    """One continuous housing: square against the top, rounded only on the desktop lip."""
-    import math
+def cubic(p0, p1, p2, p3, steps=18):
+    pts = []
+    for i in range(steps + 1):
+        t = i / steps
+        u = 1 - t
+        x = u**3 * p0[0] + 3 * u**2 * t * p1[0] + 3 * u * t**2 * p2[0] + t**3 * p3[0]
+        y = u**3 * p0[1] + 3 * u**2 * t * p1[1] + 3 * u * t**2 * p2[1] + t**3 * p3[1]
+        pts.append((x, y))
+    return pts
 
+
+def corner(start, c, end, k=0.62):
+    return cubic(
+        start,
+        (start[0] + (c[0] - start[0]) * k, start[1] + (c[1] - start[1]) * k),
+        (end[0] + (c[0] - end[0]) * k, end[1] + (c[1] - end[1]) * k),
+        end,
+        steps=12,
+    )
+
+
+def draw_notch_blend(base, notch, body, radius=28, fill=BEZEL):
+    """Continuous island silhouette — flush top, S-curve ears, capsule bottom. Not a T."""
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
     nx0, _, nx1, nh = notch
-    bx0, _, bx1, by1 = body
-    r = radius
-    ir = min(11, (nx0 - bx0) * 0.4, 14)
+    bx0, by0, bx1, by1 = body
+    nW = nx1 - nx0
+    body_w = bx1 - bx0
+    body_h = by1 - by0
+    nL = (bx0 + bx1) / 2 - nW / 2
+    nR = nL + nW
+    wing = max(0, (body_w - nW) / 2)
+    lip = max(0, body_h - nh)
+    rest_like = wing < 1.5 or lip < 2
+    ear_k = 0.58
 
-    def arc(cx, cy, rad, a0, a1, steps=7):
-        pts = []
-        for i in range(steps + 1):
-            t = math.radians(a0 + (a1 - a0) * i / steps)
-            pts.append((cx + rad * math.cos(t), cy + rad * math.sin(t)))
-        return pts
+    if rest_like:
+        r = min(max(radius, body_h * 0.48), body_w / 2, body_h / 2)
+        y0f = by1 - r
+        y1f = y0f
+        bottom_r = r
+    else:
+        bottom_r = min(max(radius, min(lip * 0.36, 36)), body_w / 2, body_h / 2)
+        stem = min(nh * 0.58, max(8, nh - 8))
+        y0f = by0 + stem
+        flare_h = min(max(40, 22), 46, lip * 0.62, max(8, by1 - bottom_r - y0f))
+        y1f = y0f + flare_h
+        if y1f > by1 - 8:
+            y1f = by1 - 8
+        bottom_r = min(bottom_r, max(12, by1 - y1f))
+    dy = max(0, y1f - y0f)
 
-    pts = [(nx0, 0), (nx1, 0)]
-    pts += arc(nx1 + ir, nh - ir, ir, 180, 90)
-    pts += arc(bx1 - r, nh + r, r, 270, 360)
-    pts += arc(bx1 - r, by1 - r, r, 0, 90)
-    pts += arc(bx0 + r, by1 - r, r, 90, 180)
-    pts += arc(bx0 + r, nh + r, r, 180, 270)
-    pts += arc(nx0 - ir, nh - ir, ir, 90, 0)
+    pts = [(nL, by0), (nR, by0), (nR, y0f)]
+    pts += cubic((nR, y0f), (nR, y0f + ear_k * dy), (bx1, y1f - ear_k * dy), (bx1, y1f), 22)[1:]
+    pts.append((bx1, by1 - bottom_r))
+    pts += corner((bx1, by1 - bottom_r), (bx1, by1), (bx1 - bottom_r, by1))[1:]
+    pts.append((bx0 + bottom_r, by1))
+    pts += corner((bx0 + bottom_r, by1), (bx0, by1), (bx0, by1 - bottom_r))[1:]
+    pts.append((bx0, y1f))
+    pts += cubic((bx0, y1f), (bx0, y1f - ear_k * dy), (nL, y0f + ear_k * dy), (nL, y0f), 22)[1:]
+    pts.append((nL, by0))
     d.polygon(pts, fill=fill)
     return Image.alpha_composite(base, overlay)
 
 
 def island_collapsed(path: Path):
-    img = Image.new("RGBA", (1280, 720), DESK)
+    img = Image.new("RGBA", (1280, 720), DESK_LIP)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, 1280, 32), fill=BEZEL)
-    d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
-    d.text((1180, 8), "100%", font=font(12), fill=(200, 204, 208, 180))
-    img = draw_notch_blend(img, (548, 0, 732, 32), (470, 32, 810, 86), radius=18, fill=BEZEL)
+    d.rectangle((0, 0, 1280, 32), fill=(236, 238, 240, 255))
+    d.text((18, 8), "Mon 9:41", font=font(12), fill=(80, 84, 88, 220))
+    d.text((1180, 8), "100%", font=font(12), fill=(80, 84, 88, 220))
+    img = draw_notch_blend(img, (548, 0, 732, 32), (466, 0, 814, 100), radius=28, fill=BEZEL)
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((488, 42, 512, 66), radius=6, fill=KELP)
     d.text((522, 42), "Low Tide", font=font(14, True), fill=FOAM)
     d.text((522, 60), "Still Harbor", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
     d.rounded_rectangle((742, 46, 766, 64), radius=8, fill=(255, 255, 255, 22))
     d.rounded_rectangle((772, 46, 796, 64), radius=8, fill=(255, 255, 255, 22))
-    d.text((40, 660), "Design placeholder · True-black island hugging the hardware notch", font=font(14), fill=(160, 166, 170, 200))
+    d.text((40, 660), "Design placeholder · Organic compact island from the hardware notch", font=font(14), fill=(90, 94, 98, 220))
     img.convert("RGB").save(path, quality=92)
 
 
 def island_expanded(path: Path):
-    img = Image.new("RGBA", (1280, 720), DESK)
+    img = Image.new("RGBA", (1280, 720), DESK_LIP)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, 1280, 32), fill=BEZEL)
-    d.text((18, 8), "Mon 9:41", font=font(12), fill=(200, 204, 208, 180))
-    img = draw_notch_blend(img, (548, 0, 732, 32), (426, 32, 854, 250), radius=22, fill=BEZEL)
+    d.rectangle((0, 0, 1280, 32), fill=(236, 238, 240, 255))
+    d.text((18, 8), "Mon 9:41", font=font(12), fill=(80, 84, 88, 220))
+    img = draw_notch_blend(img, (548, 0, 732, 32), (426, 0, 854, 250), radius=32, fill=BEZEL)
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((448, 48, 532, 132), radius=14, fill=KELP)
     d.text((548, 52), "Low Tide", font=font(20, True), fill=FOAM)
@@ -200,7 +238,7 @@ def island_expanded(path: Path):
     d.text((684, 168), "42", font=font(10), fill=FOAM)
     d.rounded_rectangle((448, 204, 832, 236), radius=10, fill=(255, 255, 255, 18))
     d.text((460, 212), "Shelf   notes.pdf    shot.png", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 180))
-    d.text((40, 660), "Design placeholder · True-black island expanded from the notch", font=font(14), fill=(160, 166, 170, 200))
+    d.text((40, 660), "Design placeholder · Organic island silhouette from the notch", font=font(14), fill=(90, 94, 98, 220))
     img.convert("RGB").save(path, quality=92)
 
 

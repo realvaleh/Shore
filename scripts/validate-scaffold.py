@@ -153,6 +153,14 @@ def main() -> int:
         err("PreferenceKey defaultValue must be a static let (Swift 6 concurrency)")
     if "IslandBlendShape" not in theme:
         err("missing IslandBlendShape notch-blend chrome")
+    if "addCurve" not in theme:
+        err("island chrome must be a continuous cubic path, not composited rectangles")
+    if "path.addRect" in theme:
+        err("collapsed island must not fill a sharp-cornered rectangle")
+    if "flushTop" not in theme or "earRadius" not in theme:
+        err("island silhouette must morph neck/ears/corners as one path family")
+    if "static func island(" not in theme:
+        err("IslandBlendShape.island factory missing")
     if "shoreMorph" not in theme:
         err("missing elastic shoreMorph animation")
     if "bezel" not in theme:
@@ -179,6 +187,8 @@ def main() -> int:
         err("island surface must use NSTrackingArea for hover")
     if "hitTest" not in overlay:
         err("island surface must hit-test only the chrome")
+    if "chromeContains" not in overlay:
+        err("island hit-testing must follow the silhouette path, not a T-bounding rect")
     if "safeAreaInsets" not in overlay or "safeAreaRegions" not in overlay:
         err("island host must zero safe-area so chrome can sit flush to the bezel")
 
@@ -187,6 +197,8 @@ def main() -> int:
         err("island hover must monitor NSEvent mouseMoved globally")
     if "hoverSuspended" not in module:
         err("island module must honor hover suspend after collapse")
+    if "chromeContains" not in module:
+        err("island module must hit-test the organic silhouette, not the T bounding box")
 
     chips = read(ROOT / "Shore/Island/LiveChips.swift")
     if "toggleMute" not in chips:
