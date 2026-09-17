@@ -1,0 +1,17 @@
+name: Scaffold
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SwiftUI source scaffold
+        run: python3 scripts/validate-scaffold.py
+      - name: Note Mac-only app build
+        run: |
+          echo "Shore.app cannot be compiled on GitHub-hosted Linux."
+          echo "Open Shore.xcodeproj on macOS 14+ with Xcode 15+."
