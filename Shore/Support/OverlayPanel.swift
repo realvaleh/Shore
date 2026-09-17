@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Borderless floating panel used by both Island (interactive) and Dock Cove (chrome-only hit testing).
+/// Borderless floating panel used by the Island and the drag-time file basket.
 @MainActor
 final class OverlayPanel: NSPanel {
     init(size: NSSize, interactive: Bool) {

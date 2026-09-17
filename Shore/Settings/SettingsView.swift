@@ -14,15 +14,9 @@ struct SettingsView: View {
             )
             moduleCard(
                 title: "File shelf",
-                subtitle: "Optional island tray for the same parked files as Dock Cove.",
+                subtitle: "Park files on the island. Hover or drag onto the notch; a basket appears only while you drag.",
                 symbol: "tray",
                 isOn: $settings.fileShelfEnabled
-            )
-            moduleCard(
-                title: "Dock Cove",
-                subtitle: "A file tray above the Dock. Drop files to park them, drag them out when you need them.",
-                symbol: "tray",
-                isOn: $settings.dockEnabled
             )
             Toggle(isOn: $settings.sampleWhenIdle) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -41,7 +35,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(24)
-        .frame(width: 380, height: 520)
+        .frame(width: 380, height: 440)
     }
 
     private var header: some View {

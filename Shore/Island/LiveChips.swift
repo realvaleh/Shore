@@ -82,7 +82,7 @@ final class LiveChipStore: ObservableObject {
                 LiveChip(
                     kind: .volume,
                     symbol: volume.symbol,
-                    label: volume.muted ? "Muted" : "\(Int((volume.level * 100).rounded()))",
+                    label: volume.muted ? "Mute" : "\(Int((volume.level * 100).rounded()))",
                     progress: volume.muted ? 0 : volume.level,
                     emphasized: now < volumePulseUntil
                 )

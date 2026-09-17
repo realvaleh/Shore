@@ -97,7 +97,7 @@ def main() -> int:
             err(f"README missing section/mention: {needle}")
 
     settings = read(ROOT / "Shore/App/ShoreSettings.swift")
-    if "islandEnabled" not in settings or "dockEnabled" not in settings:
+    if "islandEnabled" not in settings:
         err("settings toggles missing")
     if "fileShelfEnabled" not in settings:
         err("file shelf settings toggle missing")
@@ -105,6 +105,8 @@ def main() -> int:
         err("ShoreSettings must be MainActor-isolated")
     if "static let shared" not in settings:
         err("ShoreSettings.shared missing")
+    if "dockEnabled" in settings and "Published var dockEnabled" in settings:
+        err("Dock Cove toggle must be retired from ShoreSettings")
 
     runtime = read(ROOT / "Shore/App/ShoreRuntime.swift")
     if re.search(r"private let settings\s*=\s*ShoreSettings\.shared", runtime):
@@ -147,6 +149,10 @@ def main() -> int:
         err("island must suspend hover after an explicit collapse")
     if "ChipRow(store:" not in island:
         err("island chips must be wired as interactive controls, not silent collapse targets")
+    if "onDrop" not in island:
+        err("island must accept file drops onto the notch chrome")
+    if "VolumeHUDRow" not in island:
+        err("volume HUD row missing from compact island")
 
     theme = read(ROOT / "Shore/Design/ShoreTheme.swift")
     if "static var defaultValue" in theme:
@@ -161,6 +167,12 @@ def main() -> int:
         err("island silhouette must morph neck/ears/corners as one path family")
     if "static func island(" not in theme:
         err("IslandBlendShape.island factory missing")
+    if "path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))" not in theme:
+        err("notched island must flush a full-width top to the bezel (not a notch-width stem)")
+    if "nL" in theme or "nR" in theme or "yFlare0" in theme:
+        err("island path must not stem from notch width then flare (that is the T-bar)")
+    if "compositingGroup" not in theme:
+        err("island chrome must compositingGroup so the bezel fill does not AA into a gray halo")
     if "shoreMorph" not in theme:
         err("missing elastic shoreMorph animation")
     if "bezel" not in theme:
@@ -214,15 +226,20 @@ def main() -> int:
 
     dock = read(ROOT / "Shore/Dock/DockModule.swift")
     if "TideLine" in dock:
-        err("Tide Line must be replaced by the Dock file cove")
-    if "Cove" not in dock or "onDrop" not in dock:
-        err("dock module must be a file cove / drop tray")
+        err("Tide Line must stay gone")
+    if "Cove" in dock or "dockVisible" in dock:
+        err("Dock Cove / always-on dock tray must be removed")
+    if "Basket" not in dock or "onDrop" not in dock:
+        err("dock module must be a drag-time file basket")
     if "draggingFiles" not in dock:
-        err("cove must appear when a file drag starts")
-    if "dockVisible" not in dock:
-        err("cove must appear when the Dock is revealed")
+        err("basket must appear when a file drag starts")
     if "hitTest" not in dock:
-        err("cove must hit-test only its chrome so Dock clicks pass around it")
+        err("basket must hit-test only its chrome so the desktop stays clickable")
+    if "var revealed: Bool { draggingFiles || targeted }" not in dock and "revealed: Bool { draggingFiles" not in dock:
+        err("basket must reveal only while a drag is in flight")
+    ui = read(ROOT / "Shore/Settings/SettingsView.swift") + read(ROOT / "Shore/App/ShoreApp.swift")
+    if "Dock Cove" in ui:
+        err("settings/menu must not offer a Dock Cove toggle")
 
     # Originality guardrail — we talk about peers in README, not copy them in code.
     banned = ("Atoll", "BoringNotch", "Boring Notch", "Notchy", "Droppy")

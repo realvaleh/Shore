@@ -58,6 +58,7 @@ final class IslandModule {
             panel.animator().alphaValue = 1
         }
 
+        surface.registerForDraggedTypes([.fileURL])
         surface.chromeRectInView = { [weak self] in
             guard let self else { return .zero }
             return IslandPlacement.chromeRect(in: self.surface.bounds, size: self.currentChromeSize())

@@ -15,18 +15,21 @@ enum ShorePalette {
 enum IslandMetrics {
     static let collapsedHeight: CGFloat = 36
     static let collapsedMinWidth: CGFloat = 220
-    static let compactWidth: CGFloat = 348
-    /// Tall enough that compact is a pill the stem can melt into, not a T-bar.
-    static let compactLip: CGFloat = 68
-    static let expandedSize = CGSize(width: 428, height: 176)
-    static let expandedLip: CGFloat = 168
+    /// Compact is a modest capsule, not a menu-bar-wide status strip.
+    static let compactWidth: CGFloat = 286
+    /// One media row under the camera housing — height grows down, width grows with the top.
+    static let compactLip: CGFloat = 44
+    static let expandedSize = CGSize(width: 392, height: 168)
+    static let expandedLip: CGFloat = 144
     static let floatingGap: CGFloat = 8
-    static let shelfHeight: CGFloat = 58
-    static let restCornerRadius: CGFloat = 18
-    static let compactCornerRadius: CGFloat = 28
-    static let pinnedCornerRadius: CGFloat = 32
-    static let compactEarRadius: CGFloat = 40
-    static let pinnedEarRadius: CGFloat = 44
+    static let shelfHeight: CGFloat = 52
+    static let restCornerRadius: CGFloat = 14
+    static let compactCornerRadius: CGFloat = 22
+    static let pinnedCornerRadius: CGFloat = 24
+    /// Rest covers the housing with square-against-bezel top; ears grow only when the body is wider.
+    static let restEarRadius: CGFloat = 0
+    static let compactEarRadius: CGFloat = 12
+    static let pinnedEarRadius: CGFloat = 11
     static let blendRadius: CGFloat = pinnedCornerRadius
     static let invertedRadius: CGFloat = pinnedEarRadius
     static let hoverSlopEnter: CGFloat = 16
@@ -43,7 +46,7 @@ enum IslandMetrics {
     static func earRadius(pinned: Bool, hovering: Bool) -> CGFloat {
         if pinned { return pinnedEarRadius }
         if hovering { return compactEarRadius }
-        return compactEarRadius * 0.6
+        return restEarRadius
     }
 }
 
@@ -71,12 +74,12 @@ enum ShoreType {
 
 /// One continuous island silhouette that morphs collapsed → compact → expanded.
 ///
-/// Not a T of two rectangles. Control points of a single path family animate:
-/// neck width/height, body size (the rect), bottom corner radii, and ear radii.
-/// Collapsed (wing ≈ 0): flush to the top bezel, heavily rounded bottom (capsule).
-/// Compact / pinned: stem follows the hardware notch, then a cubic S-curve ear
-/// consumes the whole wing (concave then convex, no horizontal shoulder), then
-/// large squircle bottom corners. No 90° exterior corner on the desktop lip.
+/// Hardware-extension family (not a T): the chrome rect *is* the island. The top
+/// edge is always the full width, flush to the bezel. Concave cubic ears inset
+/// the sides from those top corners so the shape melts into the menu bar; the
+/// bottom is a squircle capsule. Rest (ear → 0) is square against the bezel with
+/// a rounded bottom, covering the camera housing. Compact and pinned grow the
+/// same path — never a narrow notch-width stem flaring into a wider body.
 struct IslandBlendShape: InsettableShape {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
@@ -154,87 +157,74 @@ struct IslandBlendShape: InsettableShape {
         guard rect.width > 1, rect.height > 1 else { return Path() }
 
         // Floating displays: one continuous pill, all four corners rounded.
-        if !flushTop || notchWidth < 1 {
+        if !flushTop {
             return roundedRectPath(in: rect, includeTop: includeTop)
         }
 
-        let nW = min(max(0, notchWidth), rect.width)
-        let nH = min(max(0, notchHeight), rect.height)
-        let nL = rect.minX + (rect.width - nW) / 2
-        let nR = nL + nW
-        let wing = max(0, (rect.width - nW) / 2)
-        let lip = max(0, rect.height - nH)
-        let squircle: CGFloat = 0.62
-        let earK: CGFloat = 0.58
+        // Cubic kappa is Shore's squircle language (not a circular quad).
+        let squircle: CGFloat = 0.55
+        let earK: CGFloat = 0.52
 
-        // Same path family at every stage. Rest (wing/lip → 0) degenerates to a
-        // flush-top capsule: S-curve length 0, bottom radius ≈ half height.
-        let restLike = wing < 1.5 || lip < 2
-        var bottomR = min(
-            restLike ? max(cornerRadius, rect.height * 0.48) : max(cornerRadius, min(lip * 0.36, 36)),
-            rect.width / 2,
-            rect.height / 2
+        // Ears inset the vertical sides. Zero ear = square top against the bezel.
+        let ear = min(max(0, earRadius), rect.width * 0.20, rect.height * 0.38)
+        let sideInset = ear
+        let left = rect.minX + sideInset
+        let right = rect.maxX - sideInset
+
+        let restLike = rect.height <= (notchHeight > 1 ? notchHeight + 3 : 40)
+        let bottomCap = restLike ? max(cornerRadius, rect.height * 0.42) : cornerRadius
+        let bottomR = min(
+            max(bottomCap, 8),
+            max(6, (rect.width / 2) - sideInset - 1),
+            max(6, rect.height - ear - 2),
+            rect.height * 0.5
         )
-
-        let yFlare0: CGFloat
-        let yFlare1: CGFloat
-        if restLike {
-            yFlare0 = rect.maxY - bottomR
-            yFlare1 = yFlare0
-        } else {
-            let stem = min(nH * 0.58, max(8, nH - 8))
-            yFlare0 = rect.minY + stem
-            let flareH = min(
-                max(earRadius, 22),
-                46,
-                lip * 0.62,
-                max(8, rect.maxY - bottomR - yFlare0)
-            )
-            var flareEnd = yFlare0 + flareH
-            if flareEnd > rect.maxY - 8 {
-                flareEnd = rect.maxY - 8
-            }
-            yFlare1 = flareEnd
-            bottomR = min(bottomR, max(12, rect.maxY - yFlare1))
-        }
-        let dy = max(0, yFlare1 - yFlare0)
 
         var path = Path()
         if includeTop {
-            path.move(to: CGPoint(x: nL, y: rect.minY))
-            path.addLine(to: CGPoint(x: nR, y: rect.minY))
+            // Full-width flush top — the island is as wide at the bezel as it is below.
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         } else {
-            path.move(to: CGPoint(x: nR, y: rect.minY))
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
         }
-        path.addLine(to: CGPoint(x: nR, y: yFlare0))
-        path.addCurve(
-            to: CGPoint(x: rect.maxX, y: yFlare1),
-            control1: CGPoint(x: nR, y: yFlare0 + earK * dy),
-            control2: CGPoint(x: rect.maxX, y: yFlare1 - earK * dy)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomR))
+
+        if ear > 0.5 {
+            path.addCurve(
+                to: CGPoint(x: right, y: rect.minY + ear),
+                control1: CGPoint(x: rect.maxX - ear * earK, y: rect.minY),
+                control2: CGPoint(x: right, y: rect.minY + ear * (1 - earK))
+            )
+        }
+
+        path.addLine(to: CGPoint(x: right, y: rect.maxY - bottomR))
         addCorner(
             &path,
-            from: CGPoint(x: rect.maxX, y: rect.maxY - bottomR),
-            corner: CGPoint(x: rect.maxX, y: rect.maxY),
-            to: CGPoint(x: rect.maxX - bottomR, y: rect.maxY),
+            from: CGPoint(x: right, y: rect.maxY - bottomR),
+            corner: CGPoint(x: right, y: rect.maxY),
+            to: CGPoint(x: right - bottomR, y: rect.maxY),
             kappa: squircle
         )
-        path.addLine(to: CGPoint(x: rect.minX + bottomR, y: rect.maxY))
+        path.addLine(to: CGPoint(x: left + bottomR, y: rect.maxY))
         addCorner(
             &path,
-            from: CGPoint(x: rect.minX + bottomR, y: rect.maxY),
-            corner: CGPoint(x: rect.minX, y: rect.maxY),
-            to: CGPoint(x: rect.minX, y: rect.maxY - bottomR),
+            from: CGPoint(x: left + bottomR, y: rect.maxY),
+            corner: CGPoint(x: left, y: rect.maxY),
+            to: CGPoint(x: left, y: rect.maxY - bottomR),
             kappa: squircle
         )
-        path.addLine(to: CGPoint(x: rect.minX, y: yFlare1))
-        path.addCurve(
-            to: CGPoint(x: nL, y: yFlare0),
-            control1: CGPoint(x: rect.minX, y: yFlare1 - earK * dy),
-            control2: CGPoint(x: nL, y: yFlare0 + earK * dy)
-        )
-        path.addLine(to: CGPoint(x: nL, y: rect.minY))
+        path.addLine(to: CGPoint(x: left, y: rect.minY + ear))
+
+        if ear > 0.5 {
+            path.addCurve(
+                to: CGPoint(x: rect.minX, y: rect.minY),
+                control1: CGPoint(x: left, y: rect.minY + ear * (1 - earK)),
+                control2: CGPoint(x: rect.minX + ear * earK, y: rect.minY)
+            )
+        } else {
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        }
+
         if includeTop { path.closeSubpath() }
         return path
     }
@@ -315,6 +305,7 @@ struct IslandChrome: View {
         shape
             .fill(ShorePalette.bezel)
             .overlay { edgeLight }
+            .compositingGroup()
             .shadow(
                 color: ShorePalette.bezel.opacity(hugsNotch ? 0 : 0.45),
                 radius: hugsNotch ? 0 : 16,
@@ -324,10 +315,22 @@ struct IslandChrome: View {
 
     @ViewBuilder
     private var edgeLight: some View {
-        // Hairline on the desktop lip only. No gray halo, no material fringe,
-        // and never a stroke on the housing edge (that would read as a seam).
-        NotchLipStroke(shape: shape)
-            .stroke(Color.white.opacity(hugsNotch ? 0.05 : 0.06), lineWidth: 0.6)
+        // Hairline on the desktop lip only. Rest (ear ≈ 0) draws no stroke so
+        // the housing blend stays #000000 without an AA fringe at the bezel.
+        let rest = hugsNotch && shape.earRadius < 1
+        if !rest {
+            NotchLipStroke(shape: shape)
+                .stroke(Color.white.opacity(hugsNotch ? 0.04 : 0.06), lineWidth: 0.5)
+        }
+    }
+}
+
+enum ShoreTime {
+    static func clock(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let minutes = total / 60
+        let secs = total % 60
+        return String(format: "%d:%02d", minutes, secs)
     }
 }
 

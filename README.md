@@ -1,8 +1,8 @@
 # Shore
 
-Free, native **macOS** extras: a Dynamic Island–style notch (or floating pill) and a Dock file cove. One app, two optional modules, designed to stay out of the way.
+Free, native **macOS** extras: a Dynamic Island–style notch (or floating pill) with file parking on the island. One app, optional modules, designed to stay out of the way.
 
-Shore is **not** a feature dump, a Dock reskin, or an Electron wrapper. v1 is beauty-first: now-playing that looks like hardware, live chips that do something, and a file tray above the Dock.
+Shore is **not** a feature dump, a Dock reskin, or an Electron wrapper. v1 is beauty-first: now-playing that looks like hardware, live chips that do something, and a file shelf that only shows up when you ask for it.
 
 ## Download
 
@@ -29,41 +29,41 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 
 - A menu-bar utility (`LSUIElement`) with no Dock icon of its own
 - **Island** — now-playing that hugs a notched MacBook camera housing in true `#000000` bezel black, or a floating pill on other displays. Hover expands instantly from the notch; click pins the player; click outside dismisses.
-- **File shelf** — optional tray on the island: drop files to park them, drag them out later (same hold as Cove)
-- **Dock Cove** — a file tray above the system Dock. Appears when the Dock is revealed or when a file drag starts. Drop files in, retrieve them later.
-- Settings to enable or disable each module independently
+- **File shelf** — park files on the island. Hover or drag onto the notch; tokens drag back out. A small basket appears **only while a file drag is in flight**, then vanishes.
+- Settings to enable or disable the island and the file shelf independently
 - On-device only. No account, no analytics, no network requirement
 
 ## What Shore isn’t
 
 - Not a clone of Atoll, Boring Notch, Notchy, Droppy, or other island/dock apps
 - Not a replacement for the macOS Dock, and not a cartoon skin over app icons
+- Not an always-on dashed tray above the Dock
 - Not an App Store build yet (sandbox is off so MediaRemote now-playing can work)
 - Not signed/notarized in v1 — Gatekeeper will warn until you sign it yourself
 
-Free island apps already exist. Shore’s wedge is **Island + Dock together**, kept quiet, kept original, kept free.
+Free island apps already exist. Shore’s wedge is a camera-correct island with file parking that only appears when it is useful, kept original, kept free.
 
 ## Architecture
 
 ```
 Shore.app (SwiftUI, macOS 14+, Swift 6)
 ├── Menu bar extra + Settings window
-├── ShoreSettings          island / file-shelf / dock-cove / sample-media toggles
+├── ShoreSettings          island / file-shelf / sample-media toggles
 ├── ShoreRuntime           starts and tears down modules
 ├── Island module
 │   ├── OverlayPanel       interactive, notch-aware placement, chrome-only hit testing
 │   ├── NowPlayingStore    MediaRemote (dlopen) → sample/idle fallback
 │   ├── LiveChipStore      battery (IOKit) + volume mute/drag (CoreAudio)
-│   └── FileShelfStore     shared drop/drag file parking
-└── Dock module
-    └── Cove panel         file tray above a bottom Dock (chrome-only hit testing)
+│   └── FileShelfStore     drop/drag file parking on the island
+└── Drag basket
+    └── Appears only while a file drag is in flight (near cursor / notch)
 ```
 
 | Module | Behavior |
 | --- | --- |
-| Island | Resting chrome is a capsule that engulfs the hardware notch (`#000000`, rounded bottom, no gray fill). Hover morphs **one** organic silhouette out of the bezel — cubic S-curve ears, not a T of two rectangles — with the same snappy spring in and out. Click pins the player. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Volume chip mutes; battery is a live reading and does not dismiss the island. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
-| File shelf | Optional island tray. Drop files to park them, drag tokens back out. Shares the hold with Dock Cove. Independent settings toggle. |
-| Dock Cove | Replaces the old Tide Line. A true-black tray above a **bottom** Dock: drop files here, retrieve later. Springs open when the Dock is revealed or a file drag starts. Hit-tests only its chrome so Dock icons stay clickable. Hidden when the Dock is on a side, unless a drag is in flight. |
+| Island | Resting chrome covers the hardware notch (`#000000`, flush top, rounded bottom). Hover morphs **one** silhouette — full-width flush top, concave cubic ears, capsule bottom — never a T of a narrow stem and a wider body. Compact is a single media capsule (art + title + waveform). Click pins the player (art, title, seek, controls). Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Volume chip mutes; battery is a live reading and does not dismiss the island. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
+| File shelf | Island tray. Drop files on the notch to park them, drag tokens back out. Independent settings toggle. |
+| Drag basket | Not a Dock overlay. A true-black capsule that appears only while a Finder file drag is in flight, near the cursor or the notch. Drops land on the same shelf. The macOS Dock is left alone. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
 
 MediaRemote is a private Apple framework. Shore loads it at runtime and falls back if symbols are missing or now-playing is empty. That path cannot be exercised on Linux CI.
@@ -72,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one continuous organic silhouette (capsule at rest; cubic S-curve ears when it grows) that springs between collapsed, compact, and expanded. Reduce Motion shortens the morph and stills the waveform.
+Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one continuous silhouette (flush-top capsule at rest; concave ears when it grows) that springs between collapsed, compact, and expanded. Reduce Motion shortens the morph and stills the waveform.
 
 Design placeholders (not live Mac screenshots):
 
@@ -80,7 +80,7 @@ Design placeholders (not live Mac screenshots):
 
 ![Island expanded](docs/screenshots/island-expanded.png)
 
-![Dock Cove](docs/screenshots/cove.png)
+![File basket](docs/screenshots/cove.png)
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -148,9 +148,9 @@ Sandbox is currently **off** (`Shore.entitlements`) so MediaRemote can see now-p
 Shore.xcodeproj          Xcode 16 / Swift 6 project / shared scheme
 Shore/
   App/                   @main, delegate, runtime, settings store
-  Design/                palette, motion, pill chrome
+  Design/                palette, motion, island silhouette
   Island/                panel, views, now-playing, chips, file shelf
-  Dock/                  Cove file tray
+  Dock/                  drag-time file basket (not a Dock overlay)
   Settings/              module toggles
   Support/               overlay NSPanel, screen / notch geometry
   Assets.xcassets
