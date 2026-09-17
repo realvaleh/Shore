@@ -122,20 +122,18 @@ struct FileShelfView: View {
     }
 
     private static func collect(_ providers: [NSItemProvider], done: @escaping @MainActor ([URL]) -> Void) {
+        let box = FileShelfURLBox()
         let group = DispatchGroup()
-        let lock = NSLock()
-        var urls: [URL] = []
         for provider in providers {
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 defer { group.leave() }
                 guard let url = Self.url(from: item) else { return }
-                lock.lock()
-                urls.append(url)
-                lock.unlock()
+                box.append(url)
             }
         }
         group.notify(queue: .main) {
+            let urls = box.snapshot()
             Task { @MainActor in
                 done(urls)
             }
@@ -190,5 +188,23 @@ private struct FileShelfToken: View {
         }
         .help(item.path)
         .accessibilityLabel(item.name)
+    }
+}
+
+/// Collects drop URLs from concurrent `NSItemProvider` callbacks without capturing a mutating Array.
+private final class FileShelfURLBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+
+    func append(_ url: URL) {
+        lock.lock()
+        urls.append(url)
+        lock.unlock()
+    }
+
+    func snapshot() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urls
     }
 }

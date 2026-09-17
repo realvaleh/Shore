@@ -147,6 +147,8 @@ def main() -> int:
         err("island must suspend hover after an explicit collapse")
 
     theme = read(ROOT / "Shore/Design/ShoreTheme.swift")
+    if "static var defaultValue" in theme:
+        err("PreferenceKey defaultValue must be a static let (Swift 6 concurrency)")
     if "IslandBlendShape" not in theme:
         err("missing IslandBlendShape notch-blend chrome")
     if "shoreMorph" not in theme:
