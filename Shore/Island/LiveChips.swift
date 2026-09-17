@@ -161,10 +161,13 @@ private struct BatteryReading {
             let type = desc[kIOPSTypeKey] as? String
             guard type == kIOPSInternalBatteryType else { continue }
             let current = (desc[kIOPSCurrentCapacityKey] as? NSNumber)?.doubleValue ?? 0
-            let max = (desc[kIOPSMaxCapacityKey] as? NSNumber)?.doubleValue ?? 100
-            guard max > 0 else { continue }
+            let maxCapacity = (desc[kIOPSMaxCapacityKey] as? NSNumber)?.doubleValue ?? 100
+            guard maxCapacity > 0 else { continue }
             let charging = (desc[kIOPSIsChargingKey] as? Bool) ?? false
-            return BatteryReading(level: min(1, max(0, current / max)), charging: charging)
+            return BatteryReading(
+                level: Swift.min(1, Swift.max(0, current / maxCapacity)),
+                charging: charging
+            )
         }
         return nil
     }
