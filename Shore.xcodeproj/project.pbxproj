@@ -14,10 +14,11 @@
 		8A010000000000000000006A /* IslandViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandViews.swift; sourceTree = "<group>"; };
 		8A010000000000000000006B /* NowPlaying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlaying.swift; sourceTree = "<group>"; };
 		8A010000000000000000006C /* LiveChips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChips.swift; sourceTree = "<group>"; };
-		8A010000000000000000006D /* DockModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockModule.swift; sourceTree = "<group>"; };
-		8A010000000000000000006E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		8A010000000000000000006F /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
-		8A0100000000000000000070 /* ScreenGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenGeometry.swift; sourceTree = "<group>"; };
+		8A010000000000000000006D /* FileShelf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileShelf.swift; sourceTree = "<group>"; };
+		8A010000000000000000006E /* DockModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockModule.swift; sourceTree = "<group>"; };
+		8A010000000000000000006F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		8A0100000000000000000070 /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
+		8A0100000000000000000071 /* ScreenGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenGeometry.swift; sourceTree = "<group>"; };
 		8A0100000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8A010000000000000000002A /* Shore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Shore.entitlements; sourceTree = "<group>"; };
 		8A010000000000000000002B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -34,10 +35,11 @@
 		8A01000000000000000000CE /* IslandViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006A /* IslandViews.swift */; };
 		8A01000000000000000000CF /* NowPlaying.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006B /* NowPlaying.swift */; };
 		8A01000000000000000000D0 /* LiveChips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006C /* LiveChips.swift */; };
-		8A01000000000000000000D1 /* DockModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006D /* DockModule.swift */; };
-		8A01000000000000000000D2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006E /* SettingsView.swift */; };
-		8A01000000000000000000D3 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006F /* OverlayPanel.swift */; };
-		8A01000000000000000000D4 /* ScreenGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0100000000000000000070 /* ScreenGeometry.swift */; };
+		8A01000000000000000000D1 /* FileShelf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006D /* FileShelf.swift */; };
+		8A01000000000000000000D2 /* DockModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006E /* DockModule.swift */; };
+		8A01000000000000000000D3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000006F /* SettingsView.swift */; };
+		8A01000000000000000000D4 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0100000000000000000070 /* OverlayPanel.swift */; };
+		8A01000000000000000000D5 /* ScreenGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A0100000000000000000071 /* ScreenGeometry.swift */; };
 		8A0100000000000000000029 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8A0100000000000000000028 /* Assets.xcassets */; };
 		8A0100000000000000000140 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000012C /* IOKit.framework */; };
 		8A0100000000000000000141 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A010000000000000000012D /* CoreAudio.framework */; };
@@ -78,6 +80,7 @@
 				8A010000000000000000006A /* IslandViews.swift */,
 				8A010000000000000000006B /* NowPlaying.swift */,
 				8A010000000000000000006C /* LiveChips.swift */,
+				8A010000000000000000006D /* FileShelf.swift */,
 			);
 			path = Island;
 			sourceTree = "<group>";
@@ -85,7 +88,7 @@
 		8A010000000000000000000D /* Dock */ = {
 			isa = PBXGroup;
 			children = (
-				8A010000000000000000006D /* DockModule.swift */,
+				8A010000000000000000006E /* DockModule.swift */,
 			);
 			path = Dock;
 			sourceTree = "<group>";
@@ -93,7 +96,7 @@
 		8A010000000000000000000E /* Settings */ = {
 			isa = PBXGroup;
 			children = (
-				8A010000000000000000006E /* SettingsView.swift */,
+				8A010000000000000000006F /* SettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -101,8 +104,8 @@
 		8A010000000000000000000F /* Support */ = {
 			isa = PBXGroup;
 			children = (
-				8A010000000000000000006F /* OverlayPanel.swift */,
-				8A0100000000000000000070 /* ScreenGeometry.swift */,
+				8A0100000000000000000070 /* OverlayPanel.swift */,
+				8A0100000000000000000071 /* ScreenGeometry.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -163,10 +166,11 @@
 				8A01000000000000000000CE /* IslandViews.swift in Sources */,
 				8A01000000000000000000CF /* NowPlaying.swift in Sources */,
 				8A01000000000000000000D0 /* LiveChips.swift in Sources */,
-				8A01000000000000000000D1 /* DockModule.swift in Sources */,
-				8A01000000000000000000D2 /* SettingsView.swift in Sources */,
-				8A01000000000000000000D3 /* OverlayPanel.swift in Sources */,
-				8A01000000000000000000D4 /* ScreenGeometry.swift in Sources */,
+				8A01000000000000000000D1 /* FileShelf.swift in Sources */,
+				8A01000000000000000000D2 /* DockModule.swift in Sources */,
+				8A01000000000000000000D3 /* SettingsView.swift in Sources */,
+				8A01000000000000000000D4 /* OverlayPanel.swift in Sources */,
+				8A01000000000000000000D5 /* ScreenGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

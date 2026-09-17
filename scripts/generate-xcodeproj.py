@@ -16,6 +16,7 @@ SWIFT = [
     ("IslandViews.swift", "Shore/Island/IslandViews.swift"),
     ("NowPlaying.swift", "Shore/Island/NowPlaying.swift"),
     ("LiveChips.swift", "Shore/Island/LiveChips.swift"),
+    ("FileShelf.swift", "Shore/Island/FileShelf.swift"),
     ("DockModule.swift", "Shore/Dock/DockModule.swift"),
     ("SettingsView.swift", "Shore/Settings/SettingsView.swift"),
     ("OverlayPanel.swift", "Shore/Support/OverlayPanel.swift"),
@@ -196,7 +197,7 @@ app_children = "\n".join(
 design_children = f"\t\t\t\t{file_refs['ShoreTheme.swift']} /* ShoreTheme.swift */,"
 island_children = "\n".join(
     f"\t\t\t\t{file_refs[n]} /* {n} */,"
-    for n in ["IslandModule.swift", "IslandViews.swift", "NowPlaying.swift", "LiveChips.swift"]
+    for n in ["IslandModule.swift", "IslandViews.swift", "NowPlaying.swift", "LiveChips.swift", "FileShelf.swift"]
 )
 dock_children = f"\t\t\t\t{file_refs['DockModule.swift']} /* DockModule.swift */,"
 settings_children = f"\t\t\t\t{file_refs['SettingsView.swift']} /* SettingsView.swift */,"

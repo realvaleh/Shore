@@ -85,11 +85,12 @@ final class LiveChipStore: ObservableObject {
 
 struct ChipRow: View {
     var chips: [LiveChip]
+    var compact: Bool = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: compact ? 4 : 6) {
             ForEach(chips) { chip in
-                LiveChipView(chip: chip)
+                LiveChipView(chip: chip, compact: compact)
             }
         }
     }
@@ -97,6 +98,7 @@ struct ChipRow: View {
 
 struct LiveChipView: View {
     var chip: LiveChip
+    var compact: Bool = false
 
     var body: some View {
         HStack(spacing: 4) {
@@ -105,9 +107,13 @@ struct LiveChipView: View {
             Text(chip.label)
                 .font(ShoreType.chip())
                 .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+                .opacity(compact ? 0 : 1)
+                .frame(width: compact ? 0 : nil, alignment: .leading)
+                .clipped()
         }
         .foregroundStyle(ShorePalette.foam.opacity(chip.emphasized ? 1 : 0.86))
-        .padding(.horizontal, 7)
+        .padding(.horizontal, compact ? 6 : 7)
         .padding(.vertical, 3)
         .background {
             Capsule(style: .continuous)
@@ -121,6 +127,7 @@ struct LiveChipView: View {
                         .strokeBorder(Color.white.opacity(chip.emphasized ? 0.28 : 0.10), lineWidth: 0.6)
                 }
         }
+        .help(chip.label)
         .scaleEffect(chip.emphasized ? 1.04 : 1)
         .animation(.shoreFoam, value: chip.emphasized)
         .accessibilityLabel(accessibilityText)

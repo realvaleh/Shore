@@ -19,12 +19,18 @@ final class ShoreSettings: ObservableObject {
         didSet { defaults.set(sampleWhenIdle, forKey: Keys.sampleWhenIdle) }
     }
 
+    /// Park dropped files on the island and drag them out later.
+    @Published var fileShelfEnabled: Bool {
+        didSet { defaults.set(fileShelfEnabled, forKey: Keys.fileShelfEnabled) }
+    }
+
     private let defaults: UserDefaults
 
     private enum Keys {
         static let islandEnabled = "shore.islandEnabled"
         static let dockEnabled = "shore.dockEnabled"
         static let sampleWhenIdle = "shore.sampleWhenIdle"
+        static let fileShelfEnabled = "shore.fileShelfEnabled"
     }
 
     private init(defaults: UserDefaults = .standard) {
@@ -32,5 +38,6 @@ final class ShoreSettings: ObservableObject {
         islandEnabled = defaults.object(forKey: Keys.islandEnabled) as? Bool ?? true
         dockEnabled = defaults.object(forKey: Keys.dockEnabled) as? Bool ?? true
         sampleWhenIdle = defaults.object(forKey: Keys.sampleWhenIdle) as? Bool ?? true
+        fileShelfEnabled = defaults.object(forKey: Keys.fileShelfEnabled) as? Bool ?? false
     }
 }
