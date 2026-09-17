@@ -25,7 +25,7 @@ final class ShoreRuntime {
         applyModules()
 
         settings.$islandEnabled
-            .combineLatest(settings.$dockEnabled)
+            .combineLatest(settings.$fileShelfEnabled)
             .sink { [weak self] _, _ in
                 Task { @MainActor in
                     self?.applyModules()
@@ -59,7 +59,8 @@ final class ShoreRuntime {
             island = nil
         }
 
-        if settings.dockEnabled {
+        // Drag-time basket only — never an always-on tray above the Dock.
+        if settings.fileShelfEnabled {
             if dock == nil {
                 dock = DockModule(shelf: shelf)
             }

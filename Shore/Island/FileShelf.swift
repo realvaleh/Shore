@@ -68,48 +68,42 @@ final class FileShelfStore: ObservableObject {
 struct FileShelfView: View {
     @ObservedObject var store: FileShelfStore
     var compact: Bool = false
+    var highlighted: Bool = false
     @State private var targeted = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "tray")
-                    .font(.system(size: 9, weight: .semibold))
-                Text(store.items.isEmpty ? "Drop files to park them" : "Shelf")
-                    .font(ShoreType.chip(10))
-                Spacer(minLength: 4)
-                if !store.items.isEmpty {
-                    Button("Clear") { store.clear() }
-                        .buttonStyle(.plain)
-                        .font(ShoreType.chip(10))
-                        .foregroundStyle(ShorePalette.foam.opacity(0.55))
-                }
-            }
-            .foregroundStyle(ShorePalette.foam.opacity(0.62))
+    private var hot: Bool { targeted || highlighted }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(store.items) { item in
-                        FileShelfToken(item: item) {
-                            store.remove(item.id)
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: hot ? "tray.and.arrow.down.fill" : "tray")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(ShorePalette.seaGlass)
+            if store.items.isEmpty {
+                Text(hot ? "Release to park" : "Drop files to park")
+                    .font(ShoreType.chip(10.5))
+                    .foregroundStyle(ShorePalette.foam.opacity(0.7))
+                    .lineLimit(1)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(store.items) { item in
+                            FileShelfToken(item: item) {
+                                store.remove(item.id)
+                            }
                         }
                     }
                 }
+                Button("Clear") { store.clear() }
+                    .buttonStyle(.plain)
+                    .font(ShoreType.chip(10))
+                    .foregroundStyle(ShorePalette.foam.opacity(0.55))
             }
-            .frame(height: compact ? 28 : 34)
         }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(targeted ? 0.10 : 0.05))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(
-                            ShorePalette.seaGlass.opacity(targeted ? 0.55 : 0.18),
-                            style: StrokeStyle(lineWidth: 1, dash: store.items.isEmpty ? [4, 3] : [])
-                        )
-                }
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(hot ? 0.10 : 0.04))
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $targeted) { providers in
             FileDropCollector.collect(providers) { urls in

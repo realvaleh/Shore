@@ -2,32 +2,32 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// File cove above the Dock — drop files in, drag them out later.
-/// Original Shore tray (not a reskin of other basket apps).
+/// File basket that appears **only while a file drag is in flight**.
+/// Parks drops onto the shared island shelf. Never a second Dock, never a
+/// permanent dashed pill above the system Dock.
 @MainActor
 final class DockModule {
     private let panel: OverlayPanel
-    private let surface: CoveSurfaceView
-    private let host: NSHostingController<CoveRootView>
-    private let model: CoveModel
+    private let surface: BasketSurfaceView
+    private let host: NSHostingController<BasketRootView>
+    private let model: BasketModel
     private let shelf: FileShelfStore
     private var screenObserver: NSObjectProtocol?
-    private var mouseTimer: Timer?
     private var monitors: [Any] = []
 
     init(shelf: FileShelfStore) {
-        let model = CoveModel()
+        let model = BasketModel()
         self.model = model
         self.shelf = shelf
         let screen = ScreenGeometry.primary
-        let size = Self.panelSize(on: screen)
+        let size = Self.panelSize()
 
-        host = NSHostingController(rootView: CoveRootView(model: model, shelf: shelf))
+        host = NSHostingController(rootView: BasketRootView(model: model, shelf: shelf))
         host.view.wantsLayer = true
         host.view.layer?.backgroundColor = NSColor.clear.cgColor
         host.view.autoresizingMask = [.width, .height]
 
-        surface = CoveSurfaceView(frame: NSRect(origin: .zero, size: size))
+        surface = BasketSurfaceView(frame: NSRect(origin: .zero, size: size))
         surface.wantsLayer = true
         surface.layer?.backgroundColor = NSColor.clear.cgColor
         surface.addSubview(host.view)
@@ -36,32 +36,24 @@ final class DockModule {
 
         panel = OverlayPanel(size: size, interactive: true)
         panel.contentView = surface
-        panel.setFrame(Self.panelFrame(on: screen), display: true)
+        panel.setFrame(Self.panelFrame(on: screen, mouse: NSEvent.mouseLocation), display: true)
         panel.alphaValue = 0
         panel.ignoresMouseEvents = true
 
         surface.chromeRectInView = { [weak self] in
             guard let self else { return .zero }
-            return Self.chromeRect(in: self.surface.bounds, model: self.model, shelf: self.shelf)
+            return Self.chromeRect(in: self.surface.bounds)
         }
-
-        relayout()
-        panel.orderFrontRegardless()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Self.deliver { self?.relayout() }
-        }
-
-        mouseTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
             Self.deliver { self?.tick() }
         }
-        RunLoop.main.add(mouseTimer!, forMode: .common)
 
-        let dragMask: NSEvent.EventTypeMask = [.leftMouseDragged, .rightMouseDragged, .leftMouseUp]
+        let dragMask: NSEvent.EventTypeMask = [.leftMouseDragged, .rightMouseDragged, .leftMouseUp, .mouseMoved]
         let local = NSEvent.addLocalMonitorForEvents(matching: dragMask) { [weak self] event in
             Self.deliver { self?.tick() }
             return event
@@ -75,8 +67,6 @@ final class DockModule {
     }
 
     func invalidate() {
-        mouseTimer?.invalidate()
-        mouseTimer = nil
         monitors.forEach { NSEvent.removeMonitor($0) }
         monitors.removeAll()
         if let screenObserver {
@@ -87,58 +77,40 @@ final class DockModule {
     }
 
     private func tick() {
-        let screen = ScreenGeometry.primary
-        let dock = ScreenGeometry.bottomDockHeight(on: screen)
         let dragging = Self.dragPasteboardHasFiles()
-        let mouse = NSEvent.mouseLocation
-        let tray = Self.chromeRect(in: surface.bounds, model: model, shelf: shelf)
-        let trayScreen = NSRect(
-            x: panel.frame.minX + tray.minX,
-            y: panel.frame.minY + tray.minY,
-            width: tray.width,
-            height: tray.height
-        )
-        let band = NSRect(
-            x: trayScreen.minX - 48,
-            y: screen.frame.minY,
-            width: trayScreen.width + 96,
-            height: dock + tray.height + 36
-        )
-
-        let wasRevealed = model.revealed
-        model.dockHeight = dock
-        model.dockVisible = dock >= 22
         model.draggingFiles = dragging
-        model.pointerNear = band.contains(mouse)
-        model.trayWidth = min(520, max(280, screen.frame.width * 0.36))
-
-        if model.revealed != wasRevealed {
-            relayout()
-        } else {
-            applyInteractivity()
-        }
+        model.pointer = NSEvent.mouseLocation
+        applyFrame()
+        applyInteractivity()
     }
 
-    private func relayout() {
+    private func applyFrame() {
         let screen = ScreenGeometry.primary
-        panel.setFrame(Self.panelFrame(on: screen), display: true)
-        surface.setFrameSize(Self.panelSize(on: screen))
-        host.view.setFrameSize(Self.panelSize(on: screen))
-        applyInteractivity()
+        let frame = Self.panelFrame(on: screen, mouse: model.pointer)
+        panel.setFrame(frame, display: true)
+        surface.setFrameSize(Self.panelSize())
+        host.view.setFrameSize(Self.panelSize())
     }
 
     private func applyInteractivity() {
         let open = model.revealed
         panel.ignoresMouseEvents = !open
-        if open, panel.alphaValue < 1 {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.22
-                panel.animator().alphaValue = 1
+        if open {
+            panel.orderFrontRegardless()
+            if panel.alphaValue < 1 {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.16
+                    panel.animator().alphaValue = 1
+                }
             }
-        } else if !open, panel.alphaValue > 0 {
+        } else if panel.alphaValue > 0 {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
+                context.duration = 0.12
                 panel.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                Task { @MainActor in
+                    self?.panel.orderOut(nil)
+                }
             }
         }
     }
@@ -148,28 +120,30 @@ final class DockModule {
         return pasteboard.availableType(from: [.fileURL]) != nil
     }
 
-    private static func panelSize(on screen: NSScreen) -> CGSize {
-        CGSize(width: screen.frame.width, height: CoveMetrics.panelHeight)
+    private static func panelSize() -> CGSize {
+        CGSize(width: BasketMetrics.width, height: BasketMetrics.height)
     }
 
-    private static func panelFrame(on screen: NSScreen) -> NSRect {
-        let dock = ScreenGeometry.bottomDockHeight(on: screen)
-        let size = panelSize(on: screen)
-        let y = screen.frame.minY + max(dock, 8)
-        return NSRect(x: screen.frame.minX, y: y, width: size.width, height: size.height)
+    /// Sit just below the cursor so the drag image does not cover the drop target,
+    /// clamped to the top-center of the display (near the island) if the pointer
+    /// is near the notch.
+    private static func panelFrame(on screen: NSScreen, mouse: CGPoint) -> NSRect {
+        let size = panelSize()
+        var x = mouse.x - size.width / 2
+        var y = mouse.y - size.height - 28
+        let notch = ScreenGeometry.notchFrame(on: screen)
+        if let notch, abs(mouse.x - notch.midX) < 180, mouse.y > screen.frame.maxY - 140 {
+            x = notch.midX - size.width / 2
+            y = notch.minY - size.height - 10
+        }
+        let pad: CGFloat = 8
+        x = min(max(screen.frame.minX + pad, x), screen.frame.maxX - size.width - pad)
+        y = min(max(screen.frame.minY + pad, y), screen.frame.maxY - size.height - pad)
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
-    static func chromeRect(in bounds: NSRect, model: CoveModel, shelf: FileShelfStore) -> NSRect {
-        let height = CoveMetrics.trayHeight(
-            dragging: model.draggingFiles || model.targeted,
-            empty: shelf.items.isEmpty
-        )
-        return NSRect(
-            x: bounds.midX - model.trayWidth / 2,
-            y: CoveMetrics.bottomPad,
-            width: model.trayWidth,
-            height: height
-        )
+    static func chromeRect(in bounds: NSRect) -> NSRect {
+        bounds.insetBy(dx: 4, dy: 4)
     }
 
     nonisolated private static func deliver(_ work: @escaping @MainActor () -> Void) {
@@ -181,32 +155,23 @@ final class DockModule {
     }
 }
 
-enum CoveMetrics {
-    static let panelHeight: CGFloat = 120
-    static let bottomPad: CGFloat = 8
-
-    static func trayHeight(dragging: Bool, empty: Bool) -> CGFloat {
-        if dragging { return 88 }
-        if empty { return 44 }
-        return 64
-    }
+enum BasketMetrics {
+    static let width: CGFloat = 240
+    static let height: CGFloat = 56
 }
 
 @MainActor
-final class CoveModel: ObservableObject {
-    @Published var dockVisible = false
+final class BasketModel: ObservableObject {
     @Published var draggingFiles = false
-    @Published var pointerNear = false
     @Published var targeted = false
-    @Published var dockHeight: CGFloat = 0
-    @Published var trayWidth: CGFloat = 420
+    @Published var pointer: CGPoint = .zero
 
-    var revealed: Bool { dockVisible || draggingFiles }
+    var revealed: Bool { draggingFiles || targeted }
 }
 
-/// Hit-tests only the cove chrome so Dock icons and the desktop stay clickable.
+/// Hit-tests only the basket chrome so the rest of the desktop stays clickable.
 @MainActor
-final class CoveSurfaceView: NSView {
+final class BasketSurfaceView: NSView {
     var chromeRectInView: () -> NSRect = { .zero }
 
     override var isFlipped: Bool { false }
@@ -220,62 +185,58 @@ final class CoveSurfaceView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-struct CoveRootView: View {
-    @ObservedObject var model: CoveModel
+struct BasketRootView: View {
+    @ObservedObject var model: BasketModel
     @ObservedObject var shelf: FileShelfStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var morph: Animation { reduceMotion ? .shoreQuiet : .shoreMorph }
     private var open: Bool { model.revealed }
-    private var dragging: Bool { model.draggingFiles || model.targeted }
-    private var height: CGFloat {
-        CoveMetrics.trayHeight(dragging: dragging, empty: shelf.items.isEmpty)
-    }
 
     var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            tray
-                .frame(width: model.trayWidth, height: height)
+        ZStack {
+            capsule
                 .opacity(open ? 1 : 0)
-                .offset(y: open ? 0 : 18)
-                .scaleEffect(open ? 1 : 0.96)
+                .scaleEffect(open ? 1 : 0.92)
         }
-        .padding(.bottom, CoveMetrics.bottomPad)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(morph, value: open)
-        .animation(morph, value: height)
         .animation(morph, value: model.targeted)
-        .animation(morph, value: shelf.items.count)
         .allowsHitTesting(open)
         .accessibilityElement(children: open ? .contain : .ignore)
-        .accessibilityLabel("File cove")
-        .accessibilityHint("Drop files to park them, then drag them out later.")
+        .accessibilityLabel("File basket")
+        .accessibilityHint("Drop files to park them on the island shelf.")
     }
 
-    private var tray: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            if dragging && shelf.items.isEmpty {
-                Spacer(minLength: 0)
-                Text("Release to park")
-                    .font(ShoreType.title(13))
+    private var capsule: some View {
+        HStack(spacing: 10) {
+            Image(systemName: model.targeted ? "tray.and.arrow.down.fill" : "tray")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(ShorePalette.seaGlass)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(model.targeted ? "Release to park" : "Park on Shore")
+                    .font(ShoreType.title(12))
                     .foregroundStyle(ShorePalette.foam)
-                    .frame(maxWidth: .infinity)
-                Text("Files rest here until you drag them out.")
-                    .font(ShoreType.body(11))
+                Text("Lives on the island shelf")
+                    .font(ShoreType.body(10))
                     .foregroundStyle(ShorePalette.foam.opacity(0.55))
-                    .frame(maxWidth: .infinity)
-                Spacer(minLength: 0)
-            } else if !shelf.items.isEmpty {
-                tokenRow
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, shelf.items.isEmpty && !dragging ? 0 : 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(RoundedRectangle(cornerRadius: dragging ? 22 : 16, style: .continuous))
-        .background { trayChrome }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            Capsule(style: .continuous)
+                .fill(ShorePalette.bezel)
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(
+                            ShorePalette.seaGlass.opacity(model.targeted ? 0.75 : 0.35),
+                            lineWidth: model.targeted ? 1.4 : 1
+                        )
+                }
+        }
+        .padding(4)
         .onDrop(of: [UTType.fileURL], isTargeted: $model.targeted) { providers in
             FileDropCollector.collect(providers) { urls in
                 shelf.add(urls: urls)
@@ -283,67 +244,12 @@ struct CoveRootView: View {
             return true
         }
     }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: dragging ? "tray.and.arrow.down.fill" : "tray")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ShorePalette.seaGlass)
-            Text(headerTitle)
-                .font(ShoreType.chip(11))
-                .foregroundStyle(ShorePalette.foam.opacity(0.82))
-            Spacer(minLength: 8)
-            if !shelf.items.isEmpty {
-                Text("\(shelf.items.count)")
-                    .font(ShoreType.chip(10))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.45))
-                    .monospacedDigit()
-                Button("Clear") { shelf.clear() }
-                    .buttonStyle(.plain)
-                    .font(ShoreType.chip(10))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.55))
-            }
-        }
-        .padding(.top, shelf.items.isEmpty && !dragging ? 12 : 0)
-    }
-
-    private var headerTitle: String {
-        if dragging { return "Cove" }
-        if shelf.items.isEmpty { return "Drop files to park them" }
-        return "Cove"
-    }
-
-    private var tokenRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(shelf.items) { item in
-                    FileShelfToken(item: item) {
-                        shelf.remove(item.id)
-                    }
-                }
-            }
-        }
-        .frame(height: 34)
-    }
-
-    private var trayChrome: some View {
-        RoundedRectangle(cornerRadius: dragging ? 22 : 16, style: .continuous)
-            .fill(ShorePalette.bezel)
-            .overlay {
-                RoundedRectangle(cornerRadius: dragging ? 22 : 16, style: .continuous)
-                    .strokeBorder(
-                        ShorePalette.seaGlass.opacity(dragging ? 0.70 : (model.pointerNear ? 0.38 : 0.22)),
-                        style: StrokeStyle(lineWidth: dragging ? 1.4 : 1, dash: shelf.items.isEmpty && !dragging ? [5, 4] : [])
-                    )
-            }
-            .shadow(color: ShorePalette.bezel.opacity(0.35), radius: 12, y: 4)
-    }
 }
 
-#Preview("Cove") {
-    let model = CoveModel()
-    model.dockVisible = true
-    return CoveRootView(model: model, shelf: FileShelfStore())
-        .frame(width: 720, height: 140)
+#Preview("Basket") {
+    let model = BasketModel()
+    model.draggingFiles = true
+    return BasketRootView(model: model, shelf: FileShelfStore())
+        .frame(width: 260, height: 64)
         .background(Color.gray)
 }

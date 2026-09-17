@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum IslandStage: Equatable {
     case rest
@@ -52,6 +53,7 @@ struct IslandRootView: View {
     var onCollapse: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dropTargeted = false
 
     private var fileShelfEnabled: Bool { settings.fileShelfEnabled }
     private var stage: IslandStage { session.stage }
@@ -93,6 +95,7 @@ struct IslandRootView: View {
                 chips: chips,
                 shelf: shelf,
                 fileShelfEnabled: fileShelfEnabled,
+                dropTargeted: dropTargeted,
                 reduceMotion: reduceMotion,
                 onToggle: onToggle,
                 onCollapse: onCollapse,
@@ -110,6 +113,13 @@ struct IslandRootView: View {
         .ignoresSafeArea(.all)
         .animation(morph, value: stage)
         .animation(morph, value: chromeSize)
+        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
+            guard fileShelfEnabled else { return false }
+            FileDropCollector.collect(providers) { urls in
+                shelf.add(urls: urls)
+            }
+            return true
+        }
         .accessibilityElement(children: .contain)
     }
 }
@@ -124,6 +134,7 @@ private struct IslandCanvas: View {
     @ObservedObject var chips: LiveChipStore
     @ObservedObject var shelf: FileShelfStore
     var fileShelfEnabled: Bool
+    var dropTargeted: Bool
     var reduceMotion: Bool
     var onToggle: () -> Void
     var onCollapse: () -> Void
@@ -133,28 +144,38 @@ private struct IslandCanvas: View {
 
     private var isPinned: Bool { stage == .pinned }
     private var showsContent: Bool { !(hugsNotch && stage == .rest) }
-    private var artSize: CGFloat { isPinned ? 76 : 24 }
+    private var artSize: CGFloat { isPinned ? 72 : 26 }
     private var cameraInset: CGFloat { hugsNotch ? notchHeight : 0 }
     private var extraOpen: Bool { isPinned }
     private var shelfOpen: Bool { fileShelfEnabled && stage != .rest }
+    private var volumeHUD: LiveChip? {
+        chips.chips.first(where: { $0.kind == .volume && $0.emphasized })
+    }
+    private var showHUD: Bool { !isPinned && volumeHUD != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: isPinned ? 10 : 6) {
-            topRow
-            progress
-                .frame(height: extraOpen ? 3 : 0)
-                .opacity(extraOpen ? 1 : 0)
+            if showHUD, let hud = volumeHUD {
+                VolumeHUDRow(chip: hud)
+                    .frame(height: 28)
+            } else {
+                topRow
+            }
+            if extraOpen {
+                seekRow
+                    .frame(height: 16)
+            }
             bottomRow
                 .frame(height: extraOpen ? 36 : 0)
                 .opacity(extraOpen ? 1 : 0)
             if fileShelfEnabled {
-                FileShelfView(store: shelf, compact: !isPinned)
-                    .frame(height: shelfOpen ? (isPinned ? 52 : 40) : 0)
+                FileShelfView(store: shelf, compact: !isPinned, highlighted: dropTargeted)
+                    .frame(height: shelfOpen ? (isPinned ? 48 : 36) : 0)
                     .opacity(shelfOpen ? 1 : 0)
             }
         }
         .padding(.top, cameraInset)
-        .padding(.horizontal, isPinned ? 16 : 12)
+        .padding(.horizontal, isPinned ? 18 : 14)
         .padding(.bottom, isPinned ? 12 : 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .opacity(showsContent ? 1 : 0)
@@ -165,38 +186,31 @@ private struct IslandCanvas: View {
     }
 
     private var topRow: some View {
-        HStack(alignment: isPinned ? .top : .center, spacing: isPinned ? 14 : 10) {
-            HStack(alignment: isPinned ? .top : .center, spacing: isPinned ? 14 : 10) {
-                artwork
-                VStack(alignment: .leading, spacing: isPinned ? 4 : 2) {
-                    ShoreMarquee(
-                        text: info.hasTrack ? info.title : (isPinned ? "Nothing playing" : "Shore"),
-                        font: ShoreType.title(isPinned ? 16 : 12.5),
-                        color: ShorePalette.foam,
-                        reduceMotion: reduceMotion || isPinned,
-                        lineLimit: isPinned ? 2 : 1
-                    )
-                    .frame(height: isPinned ? 40 : 16)
-                    Text(subtitle)
-                        .font(ShoreType.body(isPinned ? 12 : 10.5))
-                        .foregroundStyle(ShorePalette.foam.opacity(0.58))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .opacity(info.hasTrack || isPinned ? 1 : 0)
-                        .frame(height: info.hasTrack || isPinned ? (isPinned ? 16 : 13) : 0)
-                }
-                .frame(maxWidth: .infinity, minHeight: isPinned ? 76 : 0, alignment: .topLeading)
-                .layoutPriority(1)
-                TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
-                    .frame(width: extraOpen ? 0 : 16)
-                    .opacity(extraOpen || !info.hasTrack ? 0 : 1)
-                    .clipped()
+        HStack(alignment: isPinned ? .center : .center, spacing: isPinned ? 14 : 10) {
+            artwork
+            VStack(alignment: .leading, spacing: isPinned ? 3 : 1) {
+                ShoreMarquee(
+                    text: info.hasTrack ? info.title : (isPinned ? "Nothing playing" : "Shore"),
+                    font: ShoreType.title(isPinned ? 15 : 12.5),
+                    color: ShorePalette.foam,
+                    reduceMotion: reduceMotion || isPinned,
+                    lineLimit: 1
+                )
+                .frame(height: isPinned ? 20 : 16)
+                Text(subtitle)
+                    .font(ShoreType.body(isPinned ? 12 : 10.5))
+                    .foregroundStyle(ShorePalette.foam.opacity(0.58))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .opacity(info.hasTrack || isPinned ? 1 : 0)
+                    .frame(height: info.hasTrack || isPinned ? (isPinned ? 16 : 0) : 0)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if !isPinned { onToggle() }
-            }
-            ChipRow(store: chips, compact: !isPinned)
+            .frame(maxWidth: .infinity, minHeight: isPinned ? 72 : 0, alignment: .leading)
+            .layoutPriority(1)
+            TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
+                .frame(width: extraOpen ? 0 : 16)
+                .opacity(extraOpen || !info.hasTrack ? 0 : 1)
+                .clipped()
             Button(action: onCollapse) {
                 Image(systemName: "chevron.compact.up")
                     .font(.system(size: 14, weight: .semibold))
@@ -212,18 +226,22 @@ private struct IslandCanvas: View {
             .accessibilityHint("Or click outside the island")
             .accessibilityHidden(!extraOpen)
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isPinned { onToggle() }
+        }
     }
 
     private var bottomRow: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            HStack(spacing: 18) {
                 IconButton(systemName: "backward.fill", action: onPrevious)
                     .accessibilityLabel("Back 10 seconds")
                 Button(action: onTogglePlay) {
                     Image(systemName: info.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(ShorePalette.ink)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                         .background(Circle().fill(ShorePalette.foam))
                 }
                 .buttonStyle(.plain)
@@ -232,9 +250,36 @@ private struct IslandCanvas: View {
                     .accessibilityLabel("Forward 10 seconds")
             }
             Spacer(minLength: 8)
+            ChipRow(store: chips, compact: false)
         }
         .clipped()
         .allowsHitTesting(extraOpen)
+    }
+
+    private var seekRow: some View {
+        HStack(spacing: 8) {
+            Text(ShoreTime.clock(info.elapsed))
+                .font(ShoreType.chip(10))
+                .foregroundStyle(ShorePalette.foam.opacity(0.45))
+                .monospacedDigit()
+                .frame(width: 34, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+                    Capsule()
+                        .fill(ShorePalette.seaGlass.opacity(0.95))
+                        .frame(width: max(4, geo.size.width * info.progress))
+                }
+            }
+            .frame(height: 4)
+            Text("-\(ShoreTime.clock(max(0, info.duration - info.elapsed)))")
+                .font(ShoreType.chip(10))
+                .foregroundStyle(ShorePalette.foam.opacity(0.45))
+                .monospacedDigit()
+                .frame(width: 40, alignment: .trailing)
+        }
+        .accessibilityValue("\(Int(info.progress * 100)) percent")
     }
 
     private var subtitle: String {
@@ -254,23 +299,8 @@ private struct IslandCanvas: View {
             }
         }
         .frame(width: artSize, height: artSize)
-        .clipShape(RoundedRectangle(cornerRadius: isPinned ? 14 : 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: isPinned ? 14 : 7, style: .continuous))
         .accessibilityHidden(true)
-    }
-
-    private var progress: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.10))
-                Capsule()
-                    .fill(ShorePalette.seaGlass.opacity(0.95))
-                    .frame(width: max(4, geo.size.width * info.progress))
-            }
-        }
-        .clipped()
-        .accessibilityValue("\(Int(info.progress * 100)) percent")
-        .accessibilityHidden(!extraOpen)
     }
 
     private var accessibilityLabel: String {
@@ -278,6 +308,35 @@ private struct IslandCanvas: View {
             return "Now playing, \(info.title) by \(info.artist)"
         }
         return "Shore island"
+    }
+}
+
+private struct VolumeHUDRow: View {
+    var chip: LiveChip
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: chip.symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ShorePalette.foam)
+                .frame(width: 22)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.12))
+                    Capsule()
+                        .fill(ShorePalette.seaGlass)
+                        .frame(width: max(6, geo.size.width * chip.progress))
+                }
+            }
+            .frame(height: 8)
+            Text(chip.label)
+                .font(ShoreType.chip(11))
+                .foregroundStyle(ShorePalette.foam.opacity(0.7))
+                .monospacedDigit()
+                .frame(width: 36, alignment: .trailing)
+        }
+        .accessibilityLabel("Volume \(chip.label)")
     }
 }
 
