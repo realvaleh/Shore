@@ -18,7 +18,11 @@ final class IslandModule {
         self.settings = settings
 
         let screen = ScreenGeometry.primary
-        applyScreen(screen)
+        // Assign notch geometry without calling instance methods during init (Swift 6).
+        session.hugsNotch = ScreenGeometry.hugsNotch(on: screen)
+        let notch = ScreenGeometry.notchSize(on: screen) ?? .zero
+        session.notchWidth = notch.width
+        session.notchHeight = notch.height
 
         let sessionRef = session
         host = IslandHost(
