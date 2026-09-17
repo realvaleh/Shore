@@ -61,7 +61,7 @@ Shore.app (SwiftUI, macOS 14+, Swift 6)
 
 | Module | Behavior |
 | --- | --- |
-| Island | Resting state matches the hardware notch (bezel black, no gap). Hover expands a compact lip from the housing with a snappy spring. Click pins the player. Titles marquee instead of clipping into “Still Mar…”. Transparent panel wings stay click-through. |
+| Island | Resting chrome is flush to the hardware notch (bezel black, no gap). Hover morphs one elastic lip from the housing — same spring in and out, not a cross-fade. Click pins the player. Explicit collapse (chevron) ignores hover until the pointer leaves, so it does not bounce back open. Titles marquee instead of clipping into “Still Mar…”. Transparent panel wings stay click-through. |
 | File shelf | Optional. Drop files onto the expanded island to park them, drag tokens back out. Independent settings toggle. |
 | Tide Line | A short glass capsule above a **bottom** Dock. Mouse nearby lights a foam highlight. The panel ignores mouse events so Dock clicks pass through. Hidden when the Dock is on a side or auto-hidden to nothing. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
@@ -72,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — wet-stone fill, bezel-black notch hug, sea-glass accent, rounded SF. Hover uses a snappy spring (Reduce Motion shortens it and stills the waveform).
+Original **tidal glass** language — wet-stone fill, bezel-black notch hug, sea-glass accent, rounded SF. The island uses one elastic shape morph for expand and collapse (Reduce Motion shortens it and stills the waveform).
 
 Design placeholders (not live Mac screenshots):
 

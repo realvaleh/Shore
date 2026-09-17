@@ -117,7 +117,9 @@ enum IslandPlacement {
         let frame = screen.frame
         let x = frame.midX - size.width / 2
         if ScreenGeometry.hugsNotch(on: screen) {
-            return NSRect(x: x, y: frame.maxY - size.height, width: size.width, height: size.height)
+            // 1pt into the bezel hides a backing-store hairline without a visible gap.
+            let y = frame.maxY - size.height + IslandMetrics.bezelFlushNudge
+            return NSRect(x: x, y: y, width: size.width, height: size.height)
         }
         let y = frame.maxY
             - ScreenGeometry.menuBarHeight(on: screen)

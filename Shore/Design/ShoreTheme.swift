@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum ShorePalette {
@@ -25,11 +26,13 @@ enum IslandMetrics {
     static let hoverSlopEnter: CGFloat = 16
     static let hoverSlopStay: CGFloat = 24
     static let notchHeightFallback: CGFloat = 32
+    static let bezelFlushNudge: CGFloat = 1
 }
 
 extension Animation {
-    /// Hover expand — snappy spring, a little overshoot, not a 0.4s ease.
-    static let shoreSpring = Animation.spring(response: 0.22, dampingFraction: 0.78)
+    /// Elastic shape morph — same spring for expand and collapse (not a cross-fade).
+    static let shoreMorph = Animation.spring(response: 0.30, dampingFraction: 0.72)
+    static let shoreSpring = shoreMorph
     static let shoreFoam = Animation.easeInOut(duration: 0.18)
     static let shoreQuiet = Animation.easeOut(duration: 0.12)
 }
@@ -305,13 +308,14 @@ struct ShoreMarquee: View {
     var color: Color
     var reduceMotion: Bool
     var speed: CGFloat = 26
+    var lineLimit: Int = 1
 
     @State private var textWidth: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
             let overflow = textWidth - geo.size.width
-            let looping = overflow > 6 && !reduceMotion
+            let looping = overflow > 6 && !reduceMotion && lineLimit == 1
             TimelineView(.animation(minimumInterval: looping ? 1 / 30 : 8, paused: !looping)) { timeline in
                 let travel = looping ? marqueeTravel(overflow: overflow, at: timeline.date) : 0
                 HStack(spacing: 36) {
@@ -343,8 +347,9 @@ struct ShoreMarquee: View {
         Text(text)
             .font(font)
             .foregroundStyle(color)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+            .lineLimit(lineLimit)
+            .minimumScaleFactor(lineLimit > 1 ? 0.88 : 1)
+            .fixedSize(horizontal: lineLimit == 1, vertical: false)
     }
 
     private func marqueeTravel(overflow: CGFloat, at date: Date) -> CGFloat {
@@ -364,5 +369,14 @@ private struct MarqueeWidthKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
+    }
+}
+
+@MainActor
+func shoreAnimate(_ updates: () -> Void) {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        withAnimation(.shoreQuiet, updates)
+    } else {
+        withAnimation(.shoreMorph, updates)
     }
 }

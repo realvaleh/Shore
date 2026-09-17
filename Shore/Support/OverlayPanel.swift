@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Borderless floating panel used by both Island (interactive) and Tide Line (click-through).
 @MainActor
@@ -35,6 +36,28 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// SwiftUI host that does not inherit the camera-housing safe-area (that inset is the gap).
+@MainActor
+final class IslandHost: NSHostingController<IslandRootView> {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        flushSafeArea()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        flushSafeArea()
+    }
+
+    private func flushSafeArea() {
+        view.additionalSafeAreaInsets = NSEdgeInsets()
+        sizingOptions = []
+        if #available(macOS 14.0, *) {
+            (view as? NSHostingView<IslandRootView>)?.safeAreaRegions = []
+        }
+    }
+}
+
 /// Hosts Island SwiftUI and hit-tests only the chrome so transparent panel wings stay click-through.
 @MainActor
 final class IslandSurfaceView: NSView {
@@ -42,6 +65,9 @@ final class IslandSurfaceView: NSView {
     var onPointerChange: () -> Void = {}
 
     override var isFlipped: Bool { false }
+
+    /// Hosting views otherwise inherit the camera-housing inset and float the chrome below it.
+    override var safeAreaInsets: NSEdgeInsets { NSEdgeInsets() }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let chrome = chromeRectInView()

@@ -7,7 +7,7 @@ final class IslandModule {
     private let settings: ShoreSettings
     private let panel: OverlayPanel
     private let surface: IslandSurfaceView
-    private let host: NSHostingController<IslandRootView>
+    private let host: IslandHost
     private var monitors: [Any] = []
     private var screenObserver: NSObjectProtocol?
     private var collapseWork: DispatchWorkItem?
@@ -21,17 +21,18 @@ final class IslandModule {
         applyScreen(screen)
 
         let sessionRef = session
-        host = NSHostingController(
+        host = IslandHost(
             rootView: IslandRootView(
                 session: session,
                 nowPlaying: nowPlaying,
                 chips: chips,
                 shelf: shelf,
                 settings: settings,
-                onToggle: { sessionRef.isPinned = true },
-                onCollapse: { sessionRef.isPinned = false }
+                onToggle: { sessionRef.pin() },
+                onCollapse: { sessionRef.collapseExplicitly() }
             )
         )
+        host.sizingOptions = []
         host.view.wantsLayer = true
         host.view.layer?.backgroundColor = NSColor.clear.cgColor
         host.view.autoresizingMask = [.width, .height]
@@ -126,14 +127,17 @@ final class IslandModule {
             pinned: session.isPinned,
             on: screen
         )
-        if settings.fileShelfEnabled, Self.dragPasteboardHasFiles() {
+        let draggingFiles = settings.fileShelfEnabled && Self.dragPasteboardHasFiles()
+        if draggingFiles {
             zone = zone.insetBy(dx: -36, dy: -36)
         }
         if zone.contains(point) {
+            if session.hoverSuspended, !draggingFiles {
+                return
+            }
             setHovering(true)
-        } else if !session.isPinned {
-            setHovering(false)
         } else {
+            session.hoverSuspended = false
             setHovering(false)
         }
     }
@@ -143,14 +147,15 @@ final class IslandModule {
             collapseWork?.cancel()
             collapseWork = nil
             if !session.isHovering {
-                session.isHovering = true
+                shoreAnimate { session.isHovering = true }
             }
             return
         }
         guard session.isHovering else { return }
         collapseWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            self?.session.isHovering = false
+            guard let self, self.session.isHovering else { return }
+            shoreAnimate { self.session.isHovering = false }
         }
         collapseWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.07, execute: work)
@@ -166,8 +171,11 @@ final class IslandModule {
             on: ScreenGeometry.primary
         )
         if !chrome.contains(NSEvent.mouseLocation) {
-            session.isPinned = false
-            setHovering(false)
+            session.hoverSuspended = false
+            shoreAnimate {
+                session.isPinned = false
+                session.isHovering = false
+            }
         }
     }
 

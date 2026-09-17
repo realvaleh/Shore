@@ -104,11 +104,13 @@ struct LiveChipView: View {
         HStack(spacing: 4) {
             Image(systemName: chip.symbol)
                 .font(.system(size: 9, weight: .semibold))
-            if !compact {
-                Text(chip.label)
-                    .font(ShoreType.chip())
-                    .monospacedDigit()
-            }
+            Text(chip.label)
+                .font(ShoreType.chip())
+                .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+                .opacity(compact ? 0 : 1)
+                .frame(width: compact ? 0 : nil, alignment: .leading)
+                .clipped()
         }
         .foregroundStyle(ShorePalette.foam.opacity(chip.emphasized ? 1 : 0.86))
         .padding(.horizontal, compact ? 6 : 7)
