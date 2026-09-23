@@ -2,9 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  App Sandbox is intentionally off. Now-playing loads the private system
+	  MediaRemote framework via dlopen; that path is not an App Store build.
+	  Do not add Accessibility, Microphone, Screen Recording, or Apple Events
+	  entitlements. Shore does not request those TCC services.
+	-->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
-	<key>com.apple.security.automation.apple-events</key>
-	<true/>
 </dict>
 </plist>

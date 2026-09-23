@@ -22,6 +22,45 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_park_boundary() -> None:
+    """Mirror of ParkedFilePath's lexical gate and directory containment."""
+
+    def remains(path: str, root: str) -> bool:
+        if not (root.startswith("/") and path.startswith("/")):
+            return False
+        if root == "/":
+            return path != "/"
+        prefix = root if root.endswith("/") else root + "/"
+        return path.startswith(prefix)
+
+    cases = (
+        ("/Users/me/Desktop/a.txt", "/Users/me/Desktop", True),
+        ("/Users/me/Desktop/sub/a.txt", "/Users/me/Desktop", True),
+        ("/Users/me/Desktop-evil/a.txt", "/Users/me/Desktop", False),
+        ("/etc/passwd", "/Users/me/Desktop", False),
+        ("/passwd", "/", True),
+        ("/", "/", False),
+    )
+    for path, root, expected in cases:
+        if remains(path, root) is not expected:
+            err(f"park boundary case failed: {path!r} in {root!r}")
+
+    def stored_ok(stored: str) -> bool:
+        if not stored.startswith("/") or "\0" in stored:
+            return False
+        parts = [part for part in stored.split("/") if part]
+        return ".." not in parts and "." not in parts
+
+    if stored_ok("/Users/me/../../etc/passwd") or stored_ok("/tmp/../etc/passwd"):
+        err("stored path with .. must be refused")
+    if stored_ok("relative/file") or stored_ok(""):
+        err("relative stored path must be refused")
+    if not stored_ok("/Users/me/Desktop/a.txt"):
+        err("absolute stored path must pass the lexical gate")
+    if stored_ok("/Users/me/./secret"):
+        err("stored path with a . segment must be refused")
+
+
 def main() -> int:
     pbx = read(ROOT / "Shore.xcodeproj" / "project.pbxproj")
     if pbx:
@@ -229,6 +268,61 @@ def main() -> int:
         err("file shelf needs a visible remove control and a drop affordance")
     if "FileDropURLBox" not in shelf and "FileDropCollector" not in shelf:
         err("file drop collection must use a Sendable box (Swift 6)")
+    if 'replacingOccurrences(of: "file://"' in shelf or "replacingOccurrences(of: \"file://\"" in shelf:
+        err("file drops must not strip file:// by string replace")
+    if "ParkedFilePath" not in shelf or "resolvingSymlinksInPath" not in shelf:
+        err("parked paths must be canonicalized and symlink-resolved")
+    if "remainsInsideDroppedDirectory" not in shelf or "accept(storedPath:" not in shelf:
+        err("parked paths must stay inside the dropped file's directory")
+    if 'split(separator: "/")' not in shelf:
+        err("stored paths must reject .. before URL conversion")
+    for path in (ROOT / "Shore").rglob("*.swift"):
+        text = path.read_text(encoding="utf-8")
+        for banned_call in ("osascript", "/bin/sh", "/bin/bash", "Process()"):
+            if banned_call in text:
+                err(f"{path.relative_to(ROOT)} must not shell out via {banned_call}")
+    if "isFileURL" not in shelf:
+        err("file drops must accept only file URLs")
+
+    entitlements = read(ROOT / "Shore/Shore.entitlements")
+    if "com.apple.security.automation.apple-events" in entitlements:
+        err("unused Apple Events entitlement must not be present")
+    if not re.search(r"com\.apple\.security\.app-sandbox</key>\s*<false/>", entitlements):
+        err("entitlements must keep the App Sandbox explicitly off")
+    for forbidden in (
+        "com.apple.security.device.audio-input",
+        "com.apple.security.device.camera",
+        "com.apple.security.device.microphone",
+    ):
+        if forbidden in entitlements:
+            err(f"unexpected TCC entitlement: {forbidden}")
+
+    info_plist = read(ROOT / "Shore/Info.plist")
+    for usage_key in (
+        "NSMicrophoneUsageDescription",
+        "NSCameraUsageDescription",
+        "NSScreenCaptureUsageDescription",
+        "NSAppleEventsUsageDescription",
+        "NSAccessibilityUsageDescription",
+    ):
+        if usage_key in info_plist:
+            err(f"Info.plist must not request {usage_key}")
+
+    security_doc = read(ROOT / "SECURITY.md")
+    for needle in ("telemetry", "notariz", "entitlement", "App Sandbox", "GitHub"):
+        if needle.lower() not in security_doc.lower():
+            err(f"SECURITY.md missing: {needle}")
+
+    if "security.md" not in readme.lower():
+        err("README must link SECURITY.md")
+    if "apple events" not in readme.lower() and "automation" not in readme.lower():
+        err("README security section must mention Automation / Apple Events")
+
+    gitignore = read(ROOT / ".gitignore")
+    if ".env" not in gitignore:
+        err(".gitignore must ignore .env")
+    if "DerivedData" not in gitignore:
+        err(".gitignore must ignore DerivedData")
 
     dock = read(ROOT / "Shore/Dock/DockModule.swift")
     if "TideLine" in dock:
@@ -254,6 +348,8 @@ def main() -> int:
         for word in banned:
             if word.lower() in text.lower():
                 err(f"{path.relative_to(ROOT)} mentions {word}")
+
+    test_park_boundary()
 
     if errors:
         print("Scaffold validation failed:")

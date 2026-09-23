@@ -1,5 +1,19 @@
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.cer
+*.mobileprovision
+*.provisionprofile
+credentials.json
+credentials.plist
+
 # Xcode
 DerivedData/
+**/DerivedData/
 build/
 *.xcuserstate
 xcuserdata/
