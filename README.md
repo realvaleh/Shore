@@ -28,8 +28,8 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 ## What Shore is
 
 - A menu-bar utility (`LSUIElement`) with no Dock icon of its own
-- **Island** — now-playing that hugs a notched MacBook camera housing in true `#000000` bezel black, or a floating pill on other displays. Hover expands instantly from the notch; click pins the player; click outside dismisses.
-- **File shelf** — park files on the island. Hover or drag onto the notch; tokens drag back out. A small basket appears **only while a file drag is in flight**, then vanishes.
+- **Island** — now-playing that rests as the camera housing in true `#000000`, or a floating pill on other displays. Hover grows one capsule from that housing (art, title, waveform); click pins the player; click outside dismisses.
+- **File shelf** — park files on the island. Drag onto the notch and the shelf shows a clear drop target; tokens have icons, a remove button, and drag back out. A small basket appears **only while a file drag is in flight** (near the pointer, or just under the island), then vanishes.
 - Settings to enable or disable the island and the file shelf independently
 - On-device only. No account, no analytics, no network requirement
 
@@ -61,9 +61,9 @@ Shore.app (SwiftUI, macOS 14+, Swift 6)
 
 | Module | Behavior |
 | --- | --- |
-| Island | Resting chrome covers the hardware notch (`#000000`, flush top, rounded bottom). Hover morphs **one** silhouette — full-width flush top, concave cubic ears, capsule bottom — never a T of a narrow stem and a wider body. Compact is a single media capsule (art + title + waveform). Click pins the player (art, title, seek, controls). Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Volume chip mutes; battery is a live reading and does not dismiss the island. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
-| File shelf | Island tray. Drop files on the notch to park them, drag tokens back out. Independent settings toggle. |
-| Drag basket | Not a Dock overlay. A true-black capsule that appears only while a Finder file drag is in flight, near the cursor or the notch. Drops land on the same shelf. The macOS Dock is left alone. |
+| Island | Rest covers the hardware notch (`#000000`, flush top, rounded chin, no stroke or shadow). Hover and pin morph **one** path: the top stays housing-width, a cubic shoulder swells into the belly, the bottom stays a squircle. Compact is a single capsule (art + title + waveform). Click pins the player (art, title, seek, controls). Chips sit on the transport row, never on the title. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
+| File shelf | Island tray. A dashed well while empty; sea-glass “Release to park” while a file is over the island. Tokens show the file icon, name, a remove button, and drag back out. Independent settings toggle. |
+| Drag basket | Not a Dock overlay. A true-black capsule that appears only while a Finder file drag is in flight, under the pointer or just below the island so it does not cover the shelf. Drops land on the same shelf. The macOS Dock is left alone. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
 
 MediaRemote is a private Apple framework. Shore loads it at runtime and falls back if symbols are missing or now-playing is empty. That path cannot be exercised on Linux CI.
@@ -72,7 +72,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one continuous silhouette (flush-top capsule at rest; concave ears when it grows) that springs between collapsed, compact, and expanded. Reduce Motion shortens the morph and stills the waveform.
+Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one silhouette: the housing at rest, then a shoulder that swells into a capsule. The same spring runs expand and collapse. Reduce Motion shortens the morph and stills the waveform.
 
 Design placeholders (not live Mac screenshots):
 

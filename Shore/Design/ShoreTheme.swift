@@ -15,26 +15,30 @@ enum ShorePalette {
 enum IslandMetrics {
     static let collapsedHeight: CGFloat = 36
     static let collapsedMinWidth: CGFloat = 220
-    /// Compact is a modest capsule, not a menu-bar-wide status strip.
-    static let compactWidth: CGFloat = 286
-    /// One media row under the camera housing — height grows down, width grows with the top.
-    static let compactLip: CGFloat = 44
-    static let expandedSize = CGSize(width: 392, height: 168)
-    static let expandedLip: CGFloat = 144
+    /// Floating displays (no camera housing). Notched compact is housing width + `compactGrowth`.
+    static let compactWidth: CGFloat = 248
+    /// How far the capsule swells past the housing. Kept short so compact stays one pill.
+    static let compactGrowth: CGFloat = 64
+    /// Media block under the housing. The shelf, when open, is added separately.
+    static let compactLip: CGFloat = 64
+    static let expandedSize = CGSize(width: 368, height: 188)
+    static let expandedLip: CGFloat = 184
     static let floatingGap: CGFloat = 8
-    static let shelfHeight: CGFloat = 52
-    static let restCornerRadius: CGFloat = 14
-    static let compactCornerRadius: CGFloat = 22
-    static let pinnedCornerRadius: CGFloat = 24
-    /// Rest covers the housing with square-against-bezel top; ears grow only when the body is wider.
+    static let shelfHeight: CGFloat = 50
+    /// Hardware chin. Tight, so rest covers the camera housing instead of drawing a pill under it.
+    static let restCornerRadius: CGFloat = 11
+    static let compactCornerRadius: CGFloat = 24
+    static let pinnedCornerRadius: CGFloat = 22
+    /// 0 at rest. When open, distance below the housing where the belly reaches full width.
     static let restEarRadius: CGFloat = 0
-    static let compactEarRadius: CGFloat = 12
-    static let pinnedEarRadius: CGFloat = 11
+    static let compactEarRadius: CGFloat = 22
+    static let pinnedEarRadius: CGFloat = 36
     static let blendRadius: CGFloat = pinnedCornerRadius
     static let invertedRadius: CGFloat = pinnedEarRadius
     static let hoverSlopEnter: CGFloat = 16
     static let hoverSlopStay: CGFloat = 24
     static let notchHeightFallback: CGFloat = 32
+    /// Panel extends this far above the framebuffer so the top edge's antialiasing is off-screen.
     static let bezelFlushNudge: CGFloat = 1
 
     static func cornerRadius(pinned: Bool, hovering: Bool) -> CGFloat {
@@ -72,14 +76,13 @@ enum ShoreType {
     }
 }
 
-/// One continuous island silhouette that morphs collapsed → compact → expanded.
+/// One continuous island silhouette that morphs rest → compact → expanded.
 ///
-/// Hardware-extension family (not a T): the chrome rect *is* the island. The top
-/// edge is always the full width, flush to the bezel. Concave cubic ears inset
-/// the sides from those top corners so the shape melts into the menu bar; the
-/// bottom is a squircle capsule. Rest (ear → 0) is square against the bezel with
-/// a rounded bottom, covering the camera housing. Compact and pinned grow the
-/// same path — never a narrow notch-width stem flaring into a wider body.
+/// The top segment is the camera housing, flush with the bezel — never the full
+/// body width (that paints a status-bar tab and squared corners into the menu bar).
+/// When the body is wider, a single cubic shoulder with vertical tangents swells
+/// from the housing into the belly. Rest (no wing) degenerates to the housing:
+/// flush top, straight sides, rounded chin. Same path family at every stage.
 struct IslandBlendShape: InsettableShape {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
@@ -152,6 +155,44 @@ struct IslandBlendShape: InsettableShape {
         return path(in: CGRect(origin: .zero, size: chromeRect.size)).contains(local)
     }
 
+    private struct Shoulder {
+        var neckLeft: CGFloat
+        var neckRight: CGFloat
+        var yStart: CGFloat
+        /// Y where the side has reached the full body width.
+        var yBelly: CGFloat
+        var bottomRadius: CGFloat
+        var opens: Bool
+    }
+
+    /// Housing neck on top, one cubic shoulder, squircle chin. Rest collapses the shoulder.
+    private func shoulder(in rect: CGRect) -> Shoulder {
+        let neck = min(max(notchWidth, 0), rect.width)
+        let neckLeft = rect.midX - neck / 2
+        let neckRight = neckLeft + neck
+        let wing = max(0, (rect.width - neck) / 2)
+        let bottomRadius = min(
+            max(cornerRadius, 8),
+            max(6, rect.width / 2 - 1),
+            rect.height * 0.48
+        )
+        let yStart = min(max(5, notchHeight * 0.46), max(5, rect.height - bottomRadius - 6))
+        let opens = wing > 0.8 && (earRadius > 0.5 || wing > 2)
+        var yBelly = yStart
+        if opens {
+            let target = notchHeight + max(earRadius, 0)
+            yBelly = min(rect.height - bottomRadius - 2, max(yStart + 8, target))
+        }
+        return Shoulder(
+            neckLeft: neckLeft,
+            neckRight: neckRight,
+            yStart: yStart,
+            yBelly: yBelly,
+            bottomRadius: bottomRadius,
+            opens: opens
+        )
+    }
+
     private func silhouettePath(in rect: CGRect, includeTop: Bool) -> Path {
         let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
         guard rect.width > 1, rect.height > 1 else { return Path() }
@@ -163,69 +204,78 @@ struct IslandBlendShape: InsettableShape {
 
         // Cubic kappa is Shore's squircle language (not a circular quad).
         let squircle: CGFloat = 0.55
-        let earK: CGFloat = 0.52
+        let bend: CGFloat = 0.66
+        let fit = shoulder(in: rect)
+        let left = rect.minX
+        let right = rect.maxX
+        let bottom = rect.maxY
 
-        // Ears inset the vertical sides. Zero ear = square top against the bezel.
-        let ear = min(max(0, earRadius), rect.width * 0.20, rect.height * 0.38)
-        let sideInset = ear
-        let left = rect.minX + sideInset
-        let right = rect.maxX - sideInset
-
-        let restLike = rect.height <= (notchHeight > 1 ? notchHeight + 3 : 40)
-        let bottomCap = restLike ? max(cornerRadius, rect.height * 0.42) : cornerRadius
-        let bottomR = min(
-            max(bottomCap, 8),
-            max(6, (rect.width / 2) - sideInset - 1),
-            max(6, rect.height - ear - 2),
-            rect.height * 0.5
-        )
+        // Desktop lip only — the housing edge and the shoulder stay unstroked
+        // so a highlight cannot read as a seam or a hairline under the bezel.
+        if !includeTop {
+            guard fit.opens else { return Path() }
+            var lip = Path()
+            lip.move(to: CGPoint(x: right, y: fit.yBelly))
+            lip.addLine(to: CGPoint(x: right, y: bottom - fit.bottomRadius))
+            addCorner(
+                &lip,
+                from: CGPoint(x: right, y: bottom - fit.bottomRadius),
+                corner: CGPoint(x: right, y: bottom),
+                to: CGPoint(x: right - fit.bottomRadius, y: bottom),
+                kappa: squircle
+            )
+            lip.addLine(to: CGPoint(x: left + fit.bottomRadius, y: bottom))
+            addCorner(
+                &lip,
+                from: CGPoint(x: left + fit.bottomRadius, y: bottom),
+                corner: CGPoint(x: left, y: bottom),
+                to: CGPoint(x: left, y: bottom - fit.bottomRadius),
+                kappa: squircle
+            )
+            lip.addLine(to: CGPoint(x: left, y: fit.yBelly))
+            return lip
+        }
 
         var path = Path()
-        if includeTop {
-            // Full-width flush top — the island is as wide at the bezel as it is below.
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        } else {
-            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        }
-
-        if ear > 0.5 {
+        path.move(to: CGPoint(x: fit.neckLeft, y: rect.minY))
+        path.addLine(to: CGPoint(x: fit.neckRight, y: rect.minY))
+        path.addLine(to: CGPoint(x: fit.neckRight, y: fit.yStart))
+        if fit.opens {
+            let dy = max(0.01, fit.yBelly - fit.yStart)
             path.addCurve(
-                to: CGPoint(x: right, y: rect.minY + ear),
-                control1: CGPoint(x: rect.maxX - ear * earK, y: rect.minY),
-                control2: CGPoint(x: right, y: rect.minY + ear * (1 - earK))
+                to: CGPoint(x: right, y: fit.yBelly),
+                control1: CGPoint(x: fit.neckRight, y: fit.yStart + bend * dy),
+                control2: CGPoint(x: right, y: fit.yBelly - bend * dy)
             )
         }
-
-        path.addLine(to: CGPoint(x: right, y: rect.maxY - bottomR))
+        path.addLine(to: CGPoint(x: right, y: bottom - fit.bottomRadius))
         addCorner(
             &path,
-            from: CGPoint(x: right, y: rect.maxY - bottomR),
-            corner: CGPoint(x: right, y: rect.maxY),
-            to: CGPoint(x: right - bottomR, y: rect.maxY),
+            from: CGPoint(x: right, y: bottom - fit.bottomRadius),
+            corner: CGPoint(x: right, y: bottom),
+            to: CGPoint(x: right - fit.bottomRadius, y: bottom),
             kappa: squircle
         )
-        path.addLine(to: CGPoint(x: left + bottomR, y: rect.maxY))
+        path.addLine(to: CGPoint(x: left + fit.bottomRadius, y: bottom))
         addCorner(
             &path,
-            from: CGPoint(x: left + bottomR, y: rect.maxY),
-            corner: CGPoint(x: left, y: rect.maxY),
-            to: CGPoint(x: left, y: rect.maxY - bottomR),
+            from: CGPoint(x: left + fit.bottomRadius, y: bottom),
+            corner: CGPoint(x: left, y: bottom),
+            to: CGPoint(x: left, y: bottom - fit.bottomRadius),
             kappa: squircle
         )
-        path.addLine(to: CGPoint(x: left, y: rect.minY + ear))
-
-        if ear > 0.5 {
+        let sideY = fit.opens ? fit.yBelly : fit.yStart
+        path.addLine(to: CGPoint(x: left, y: sideY))
+        if fit.opens {
+            let dy = max(0.01, fit.yBelly - fit.yStart)
             path.addCurve(
-                to: CGPoint(x: rect.minX, y: rect.minY),
-                control1: CGPoint(x: left, y: rect.minY + ear * (1 - earK)),
-                control2: CGPoint(x: rect.minX + ear * earK, y: rect.minY)
+                to: CGPoint(x: fit.neckLeft, y: fit.yStart),
+                control1: CGPoint(x: left, y: fit.yBelly - bend * dy),
+                control2: CGPoint(x: fit.neckLeft, y: fit.yStart + bend * dy)
             )
-        } else {
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
         }
-
-        if includeTop { path.closeSubpath() }
+        path.addLine(to: CGPoint(x: fit.neckLeft, y: rect.minY))
+        path.closeSubpath()
         return path
     }
 
@@ -297,31 +347,46 @@ struct IslandBlendShape: InsettableShape {
     }
 }
 
-struct IslandChrome: View {
+struct IslandChrome<Content: View>: View {
     var hugsNotch: Bool
     var shape: IslandBlendShape
+    var dropHot: Bool
+    var content: Content
 
-    var body: some View {
-        shape
-            .fill(ShorePalette.bezel)
-            .overlay { edgeLight }
-            .compositingGroup()
-            .shadow(
-                color: ShorePalette.bezel.opacity(hugsNotch ? 0 : 0.45),
-                radius: hugsNotch ? 0 : 16,
-                y: hugsNotch ? 0 : 8
-            )
+    init(
+        hugsNotch: Bool,
+        shape: IslandBlendShape,
+        dropHot: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.hugsNotch = hugsNotch
+        self.shape = shape
+        self.dropHot = dropHot
+        self.content = content()
     }
 
-    @ViewBuilder
-    private var edgeLight: some View {
-        // Hairline on the desktop lip only. Rest (ear ≈ 0) draws no stroke so
-        // the housing blend stays #000000 without an AA fringe at the bezel.
-        let rest = hugsNotch && shape.earRadius < 1
-        if !rest {
-            NotchLipStroke(shape: shape)
-                .stroke(Color.white.opacity(hugsNotch ? 0.04 : 0.06), lineWidth: 0.5)
+    /// Rest is the camera housing: no stroke, no shadow, so nothing reads as a gray halo.
+    private var resting: Bool { hugsNotch && shape.earRadius < 1 && !dropHot }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            shape.fill(ShorePalette.bezel)
+            if !resting {
+                NotchLipStroke(shape: shape)
+                    .stroke(
+                        dropHot ? ShorePalette.seaGlass.opacity(0.92) : Color.white.opacity(0.06),
+                        lineWidth: dropHot ? 1.5 : 0.6
+                    )
+            }
+            content
         }
+        .clipShape(shape)
+        .compositingGroup()
+        .shadow(
+            color: Color.black.opacity(resting ? 0 : 0.30),
+            radius: resting ? 0 : 16,
+            y: resting ? 0 : 9
+        )
     }
 }
 

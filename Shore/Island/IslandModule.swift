@@ -113,7 +113,9 @@ final class IslandModule {
     }
 
     private func installPointerMonitors() {
-        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        let mask: NSEvent.EventTypeMask = [
+            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .leftMouseUp, .rightMouseUp
+        ]
         let local = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             Self.deliver { self?.considerMouse(NSEvent.mouseLocation) }
             return event
@@ -147,9 +149,13 @@ final class IslandModule {
         )
         let draggingFiles = settings.fileShelfEnabled && Self.dragPasteboardHasFiles()
         if draggingFiles {
-            zone = zone.insetBy(dx: -36, dy: -36)
+            zone = zone.insetBy(dx: -72, dy: -72)
         }
-        if zone.contains(point) {
+        let inside = zone.contains(point)
+        if session.acceptingFiles != (draggingFiles && inside) {
+            session.acceptingFiles = draggingFiles && inside
+        }
+        if inside {
             if session.hoverSuspended, !draggingFiles {
                 return
             }

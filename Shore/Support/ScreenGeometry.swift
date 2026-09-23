@@ -65,9 +65,19 @@ enum ScreenGeometry {
 enum IslandPlacement {
     static func restSize(hugsNotch: Bool, notch: CGSize) -> CGSize {
         if hugsNotch, notch.width > 0, notch.height > 0 {
-            return notch
+            // Extra height matches the upward bezel nudge so the chin still meets the housing.
+            return CGSize(
+                width: notch.width,
+                height: notch.height + IslandMetrics.bezelFlushNudge
+            )
         }
         return CGSize(width: IslandMetrics.collapsedMinWidth, height: IslandMetrics.collapsedHeight)
+    }
+
+    /// Notched open states grow a fixed amount past the housing. Floating states use `minimum`.
+    static func openWidth(hugsNotch: Bool, notch: CGSize, growth: CGFloat, minimum: CGFloat) -> CGFloat {
+        guard hugsNotch, notch.width > 1 else { return minimum }
+        return max(minimum, notch.width + growth)
     }
 
     static func chromeSize(
@@ -81,20 +91,29 @@ enum IslandPlacement {
         let shelf = shelfVisible ? IslandMetrics.shelfHeight : 0
 
         if pinned {
-            let width = max(IslandMetrics.expandedSize.width, rest.width)
-            if hugsNotch {
-                return CGSize(
-                    width: width,
-                    height: rest.height + IslandMetrics.expandedLip + shelf
-                )
-            }
-            return CGSize(width: width, height: IslandMetrics.expandedSize.height + shelf)
+            let width = openWidth(
+                hugsNotch: hugsNotch,
+                notch: notch,
+                growth: 160,
+                minimum: IslandMetrics.expandedSize.width
+            )
+            let height = hugsNotch
+                ? rest.height + IslandMetrics.expandedLip + shelf
+                : IslandMetrics.expandedSize.height + shelf
+            return CGSize(width: width, height: height)
         }
 
         if hovering {
-            let width = max(IslandMetrics.compactWidth, rest.width)
-            let lip = hugsNotch ? rest.height + IslandMetrics.compactLip : IslandMetrics.collapsedHeight
-            return CGSize(width: width, height: lip + shelf)
+            let width = openWidth(
+                hugsNotch: hugsNotch,
+                notch: notch,
+                growth: IslandMetrics.compactGrowth,
+                minimum: IslandMetrics.compactWidth
+            )
+            let height = hugsNotch
+                ? rest.height + IslandMetrics.compactLip + shelf
+                : 52 + shelf
+            return CGSize(width: width, height: height)
         }
 
         return rest
