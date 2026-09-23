@@ -8,13 +8,13 @@ struct SettingsView: View {
             header
             moduleCard(
                 title: "Island",
-                subtitle: "Hugs the hardware notch. Hover expands instantly; click pins the player.",
+                subtitle: "Rests as the camera housing. Hover grows one capsule; click pins the player.",
                 symbol: "water.waves",
                 isOn: $settings.islandEnabled
             )
             moduleCard(
                 title: "File shelf",
-                subtitle: "Park files on the island. Hover or drag onto the notch; a basket appears only while you drag.",
+                subtitle: "Drop files on the island. A basket appears beside the pointer only while a file is dragging.",
                 symbol: "tray",
                 isOn: $settings.fileShelfEnabled
             )

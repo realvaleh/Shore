@@ -167,8 +167,12 @@ def main() -> int:
         err("island silhouette must morph neck/ears/corners as one path family")
     if "static func island(" not in theme:
         err("IslandBlendShape.island factory missing")
-    if "path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))" not in theme:
-        err("notched island must flush a full-width top to the bezel (not a notch-width stem)")
+    if "path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))" in theme:
+        err("body-width top edge reads as a status-bar tab; flush the housing neck, not the belly")
+    if "neckRight" not in theme or "yBelly" not in theme:
+        err("open island must swell from a housing neck into one belly")
+    if "y: rect.minY" not in theme:
+        err("notched island must flush its top edge to the bezel")
     if "nL" in theme or "nR" in theme or "yFlare0" in theme:
         err("island path must not stem from notch width then flare (that is the T-bar)")
     if "compositingGroup" not in theme:
@@ -221,6 +225,8 @@ def main() -> int:
     shelf = read(ROOT / "Shore/Island/FileShelf.swift")
     if "onDrop" not in shelf or "onDrag" not in shelf:
         err("file shelf must support drop in and drag out")
+    if "xmark" not in shelf or "Release to park" not in shelf:
+        err("file shelf needs a visible remove control and a drop affordance")
     if "FileDropURLBox" not in shelf and "FileDropCollector" not in shelf:
         err("file drop collection must use a Sendable box (Swift 6)")
 

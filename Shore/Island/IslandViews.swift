@@ -17,6 +17,8 @@ final class IslandSession: ObservableObject {
     @Published var notchHeight: CGFloat = 0
     /// After an explicit dismiss, hover is ignored until the pointer leaves the island.
     var hoverSuspended = false
+    /// True while a file drag is inside the island's hover zone.
+    @Published var acceptingFiles = false
 
     var isExpanded: Bool { isPinned }
 
@@ -81,11 +83,11 @@ struct IslandRootView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            IslandChrome(
-                hugsNotch: session.hugsNotch,
-                shape: silhouette
-            )
+        IslandChrome(
+            hugsNotch: session.hugsNotch,
+            shape: silhouette,
+            dropHot: dropTargeted || session.acceptingFiles
+        ) {
             IslandCanvas(
                 stage: stage,
                 hugsNotch: session.hugsNotch,
@@ -95,7 +97,7 @@ struct IslandRootView: View {
                 chips: chips,
                 shelf: shelf,
                 fileShelfEnabled: fileShelfEnabled,
-                dropTargeted: dropTargeted,
+                dropTargeted: dropTargeted || session.acceptingFiles,
                 reduceMotion: reduceMotion,
                 onToggle: onToggle,
                 onCollapse: onCollapse,
@@ -105,9 +107,6 @@ struct IslandRootView: View {
             )
         }
         .frame(width: chromeSize.width, height: chromeSize.height, alignment: .top)
-        .mask(alignment: .top) {
-            silhouette
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(0)
         .ignoresSafeArea(.all)
@@ -144,9 +143,14 @@ private struct IslandCanvas: View {
 
     private var isPinned: Bool { stage == .pinned }
     private var showsContent: Bool { !(hugsNotch && stage == .rest) }
-    private var artSize: CGFloat { isPinned ? 72 : 26 }
-    private var cameraInset: CGFloat { hugsNotch ? notchHeight : 0 }
-    private var extraOpen: Bool { isPinned }
+    private var artSize: CGFloat { isPinned ? 64 : 26 }
+    /// Content starts where the belly is full width, below the housing shoulder.
+    private var contentTop: CGFloat {
+        guard hugsNotch else { return isPinned ? 14 : 8 }
+        if stage == .rest { return notchHeight }
+        let belly = isPinned ? IslandMetrics.pinnedEarRadius : IslandMetrics.compactEarRadius
+        return notchHeight + belly
+    }
     private var shelfOpen: Bool { fileShelfEnabled && stage != .rest }
     private var volumeHUD: LiveChip? {
         chips.chips.first(where: { $0.kind == .volume && $0.emphasized })
@@ -154,30 +158,27 @@ private struct IslandCanvas: View {
     private var showHUD: Bool { !isPinned && volumeHUD != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isPinned ? 10 : 6) {
+        VStack(alignment: .leading, spacing: 0) {
             if showHUD, let hud = volumeHUD {
                 VolumeHUDRow(chip: hud)
                     .frame(height: 28)
+            } else if isPinned {
+                pinnedPlayer
             } else {
-                topRow
+                compactRow
             }
-            if extraOpen {
-                seekRow
-                    .frame(height: 16)
-            }
-            bottomRow
-                .frame(height: extraOpen ? 36 : 0)
-                .opacity(extraOpen ? 1 : 0)
             if fileShelfEnabled {
                 FileShelfView(store: shelf, compact: !isPinned, highlighted: dropTargeted)
-                    .frame(height: shelfOpen ? (isPinned ? 48 : 36) : 0)
+                    .frame(height: shelfOpen ? IslandMetrics.shelfHeight : 0)
+                    .clipped()
                     .opacity(shelfOpen ? 1 : 0)
             }
         }
-        .padding(.top, cameraInset)
-        .padding(.horizontal, isPinned ? 18 : 14)
-        .padding(.bottom, isPinned ? 12 : 8)
+        .padding(.top, contentTop)
+        .padding(.horizontal, isPinned ? 18 : 16)
+        .padding(.bottom, isPinned ? 12 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .topTrailing) { collapseButton }
         .opacity(showsContent ? 1 : 0)
         .accessibilityElement(children: showsContent ? .contain : .ignore)
         .accessibilityLabel(showsContent ? accessibilityLabel : "Shore island")
@@ -185,32 +186,80 @@ private struct IslandCanvas: View {
         .accessibilityHint(isPinned ? "Click outside to collapse" : "Expands the Shore island")
     }
 
-    private var topRow: some View {
-        HStack(alignment: isPinned ? .center : .center, spacing: isPinned ? 14 : 10) {
+    /// One capsule row: art, title, waveform. Chips never share this row.
+    private var compactRow: some View {
+        HStack(spacing: 10) {
             artwork
-            VStack(alignment: .leading, spacing: isPinned ? 3 : 1) {
-                ShoreMarquee(
-                    text: info.hasTrack ? info.title : (isPinned ? "Nothing playing" : "Shore"),
-                    font: ShoreType.title(isPinned ? 15 : 12.5),
-                    color: ShorePalette.foam,
-                    reduceMotion: reduceMotion || isPinned,
-                    lineLimit: 1
-                )
-                .frame(height: isPinned ? 20 : 16)
-                Text(subtitle)
-                    .font(ShoreType.body(isPinned ? 12 : 10.5))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.58))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .opacity(info.hasTrack || isPinned ? 1 : 0)
-                    .frame(height: info.hasTrack || isPinned ? (isPinned ? 16 : 0) : 0)
-            }
-            .frame(maxWidth: .infinity, minHeight: isPinned ? 72 : 0, alignment: .leading)
+            ShoreMarquee(
+                text: info.hasTrack ? info.title : "Shore",
+                font: ShoreType.title(12.5),
+                color: ShorePalette.foam,
+                reduceMotion: reduceMotion,
+                lineLimit: 1
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 16)
             .layoutPriority(1)
             TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
-                .frame(width: extraOpen ? 0 : 16)
-                .opacity(extraOpen || !info.hasTrack ? 0 : 1)
-                .clipped()
+                .frame(width: 16)
+                .opacity(info.hasTrack ? 1 : 0.45)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+    }
+
+    /// Player under the housing. Title column is alone; chips live on the transport row.
+    private var pinnedPlayer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 14) {
+                artwork
+                VStack(alignment: .leading, spacing: 3) {
+                    ShoreMarquee(
+                        text: info.hasTrack ? info.title : "Nothing playing",
+                        font: ShoreType.title(15),
+                        color: ShorePalette.foam,
+                        reduceMotion: reduceMotion,
+                        lineLimit: 1
+                    )
+                    .frame(height: 20)
+                    Text(subtitle)
+                        .font(ShoreType.body(12))
+                        .foregroundStyle(ShorePalette.foam.opacity(0.58))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                .padding(.trailing, 22)
+            }
+            seekRow
+                .frame(height: 16)
+            HStack(spacing: 12) {
+                HStack(spacing: 18) {
+                    IconButton(systemName: "backward.fill", action: onPrevious)
+                        .accessibilityLabel("Back 10 seconds")
+                    Button(action: onTogglePlay) {
+                        Image(systemName: info.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(ShorePalette.ink)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(ShorePalette.foam))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(info.isPlaying ? "Pause" : "Play")
+                    IconButton(systemName: "forward.fill", action: onNext)
+                        .accessibilityLabel("Forward 10 seconds")
+                }
+                Spacer(minLength: 12)
+                ChipRow(store: chips, compact: false)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var collapseButton: some View {
+        if isPinned {
             Button(action: onCollapse) {
                 Image(systemName: "chevron.compact.up")
                     .font(.system(size: 14, weight: .semibold))
@@ -218,42 +267,11 @@ private struct IslandCanvas: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .frame(width: extraOpen ? 22 : 0)
-            .opacity(extraOpen ? 1 : 0)
-            .clipped()
-            .allowsHitTesting(extraOpen)
+            .padding(.top, contentTop + 2)
+            .padding(.trailing, 12)
             .accessibilityLabel("Collapse island")
             .accessibilityHint("Or click outside the island")
-            .accessibilityHidden(!extraOpen)
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if !isPinned { onToggle() }
-        }
-    }
-
-    private var bottomRow: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 18) {
-                IconButton(systemName: "backward.fill", action: onPrevious)
-                    .accessibilityLabel("Back 10 seconds")
-                Button(action: onTogglePlay) {
-                    Image(systemName: info.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(ShorePalette.ink)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(ShorePalette.foam))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(info.isPlaying ? "Pause" : "Play")
-                IconButton(systemName: "forward.fill", action: onNext)
-                    .accessibilityLabel("Forward 10 seconds")
-            }
-            Spacer(minLength: 8)
-            ChipRow(store: chips, compact: false)
-        }
-        .clipped()
-        .allowsHitTesting(extraOpen)
     }
 
     private var seekRow: some View {

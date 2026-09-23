@@ -109,7 +109,8 @@ final class DockModule {
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
                 Task { @MainActor in
-                    self?.panel.orderOut(nil)
+                    guard let self, !self.model.revealed else { return }
+                    self.panel.orderOut(nil)
                 }
             }
         }
@@ -124,17 +125,24 @@ final class DockModule {
         CGSize(width: BasketMetrics.width, height: BasketMetrics.height)
     }
 
-    /// Sit just below the cursor so the drag image does not cover the drop target,
-    /// clamped to the top-center of the display (near the island) if the pointer
-    /// is near the notch.
+    /// Below the pointer so the drag image does not cover the target. If that
+    /// would sit on the island, tuck the basket just under the island instead.
     private static func panelFrame(on screen: NSScreen, mouse: CGPoint) -> NSRect {
         let size = panelSize()
-        var x = mouse.x - size.width / 2
-        var y = mouse.y - size.height - 28
-        let notch = ScreenGeometry.notchFrame(on: screen)
-        if let notch, abs(mouse.x - notch.midX) < 180, mouse.y > screen.frame.maxY - 140 {
-            x = notch.midX - size.width / 2
-            y = notch.minY - size.height - 10
+        var x = mouse.x - size.width * 0.38
+        var y = mouse.y - size.height - 36
+        if let notch = ScreenGeometry.notchFrame(on: screen) {
+            let band = NSRect(
+                x: notch.midX - 210,
+                y: notch.minY - IslandMetrics.expandedLip - IslandMetrics.shelfHeight - 8,
+                width: 420,
+                height: notch.height + IslandMetrics.expandedLip + IslandMetrics.shelfHeight + 16
+            )
+            let proposed = NSRect(x: x, y: y, width: size.width, height: size.height)
+            if proposed.intersects(band), mouse.y >= band.minY - 24 {
+                x = min(max(band.minX + 12, mouse.x - size.width * 0.38), band.maxX - size.width - 12)
+                y = band.minY - size.height - 8
+            }
         }
         let pad: CGFloat = 8
         x = min(max(screen.frame.minX + pad, x), screen.frame.maxX - size.width - pad)
@@ -156,8 +164,8 @@ final class DockModule {
 }
 
 enum BasketMetrics {
-    static let width: CGFloat = 240
-    static let height: CGFloat = 56
+    static let width: CGFloat = 236
+    static let height: CGFloat = 58
 }
 
 @MainActor
@@ -208,20 +216,42 @@ struct BasketRootView: View {
         .accessibilityHint("Drop files to park them on the island shelf.")
     }
 
+    private var parkedSummary: String {
+        let count = shelf.items.count
+        if model.targeted { return "Adds to the island shelf" }
+        if count == 0 { return "Drop to park on the island" }
+        if count == 1 { return "1 file on the island" }
+        return "\(count) files on the island"
+    }
+
     private var capsule: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.targeted ? "tray.and.arrow.down.fill" : "tray")
-                .font(.system(size: 14, weight: .semibold))
+            Image(systemName: model.targeted ? "arrow.down.circle.fill" : "tray.and.arrow.down.fill")
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(ShorePalette.seaGlass)
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.targeted ? "Release to park" : "Park on Shore")
                     .font(ShoreType.title(12))
                     .foregroundStyle(ShorePalette.foam)
-                Text("Lives on the island shelf")
+                    .lineLimit(1)
+                Text(parkedSummary)
                     .font(ShoreType.body(10))
                     .foregroundStyle(ShorePalette.foam.opacity(0.55))
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
+            if !shelf.items.isEmpty {
+                HStack(spacing: -7) {
+                    ForEach(Array(shelf.items.prefix(3))) { item in
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
+                            .resizable()
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(ShorePalette.bezel))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.6))
+                    }
+                }
+                .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -231,8 +261,8 @@ struct BasketRootView: View {
                 .overlay {
                     Capsule(style: .continuous)
                         .strokeBorder(
-                            ShorePalette.seaGlass.opacity(model.targeted ? 0.75 : 0.35),
-                            lineWidth: model.targeted ? 1.4 : 1
+                            ShorePalette.seaGlass.opacity(model.targeted ? 0.9 : 0.4),
+                            lineWidth: model.targeted ? 1.6 : 1
                         )
                 }
         }
