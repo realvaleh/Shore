@@ -3,6 +3,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Temporary file parking on the island. Original Shore shelf — not a clone of other tray apps.
+///
+/// Items are references to files the user dropped. Shore does not copy or delete them,
+/// and it does not pass paths to a shell. `ParkedFilePath` canonicalizes each path and
+/// refuses anything that is not a local file still inside the dropped file's directory.
 @MainActor
 final class FileShelfStore: ObservableObject {
     struct Item: Identifiable, Equatable, Codable {
@@ -27,19 +31,24 @@ final class FileShelfStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: key),
-           let decoded = try? JSONDecoder().decode([Item].self, from: data) {
-            items = decoded.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard let data = defaults.data(forKey: key),
+              let stored = try? JSONDecoder().decode([Item].self, from: data) else { return }
+        let accepted = stored.compactMap { item -> Item? in
+            guard let canonical = ParkedFilePath.accept(storedPath: item.path) else { return nil }
+            return Item(id: item.id, url: canonical)
+        }
+        items = accepted
+        if accepted.map(\.path) != stored.map(\.path) || accepted.map(\.name) != stored.map(\.name) {
+            persist()
         }
     }
 
     func add(urls: [URL]) {
         var next = items
         for url in urls {
-            let resolved = url.standardizedFileURL
-            guard FileManager.default.fileExists(atPath: resolved.path) else { continue }
-            if next.contains(where: { $0.path == resolved.path }) { continue }
-            next.append(Item(url: resolved))
+            guard let canonical = ParkedFilePath.accept(url) else { continue }
+            if next.contains(where: { $0.path == canonical.path }) { continue }
+            next.append(Item(url: canonical))
         }
         if next.count > Self.capacity {
             next = Array(next.suffix(Self.capacity))
@@ -155,15 +164,99 @@ enum FileDropCollector {
     }
 
     nonisolated static func url(from item: NSSecureCoding?) -> URL? {
-        if let url = item as? URL { return url }
-        if let url = item as? NSURL { return url as URL }
+        if let url = item as? URL { return url.isFileURL ? url : nil }
+        if let url = item as? NSURL {
+            let value = url as URL
+            return value.isFileURL ? value : nil
+        }
         if let data = item as? Data {
-            return URL(dataRepresentation: data, relativeTo: nil)
+            if let url = URL(dataRepresentation: data, relativeTo: nil), url.isFileURL {
+                return url
+            }
+            if let string = String(data: data, encoding: .utf8) {
+                return Self.fileURL(from: string)
+            }
+            return nil
         }
         if let string = item as? String {
-            return URL(fileURLWithPath: string.replacingOccurrences(of: "file://", with: ""))
+            return Self.fileURL(from: string)
         }
         return nil
+    }
+
+    /// Parse a drop payload as a file URL. Relative strings are refused so they
+    /// cannot be anchored to the process working directory.
+    nonisolated static func fileURL(from string: String) -> URL? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("\0") else { return nil }
+        if let url = URL(string: trimmed), url.scheme != nil {
+            return url.isFileURL ? url : nil
+        }
+        guard trimmed.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: trimmed)
+    }
+}
+
+/// Canonical local file URLs for the shelf.
+///
+/// The boundary is the directory of the path the user dropped, after that directory's
+/// own symlinks are resolved. A `..` segment or a symlink that lands outside that
+/// directory is refused. There is no second copy in Application Support.
+enum ParkedFilePath {
+    /// Restore a path from UserDefaults. Relative strings and `..` / `.` segments
+    /// are refused before `URL(fileURLWithPath:)` can anchor them to the working directory.
+    static func accept(storedPath: String) -> URL? {
+        guard storedPath.hasPrefix("/"), !storedPath.contains("\0") else { return nil }
+        let parts = storedPath.split(separator: "/")
+        guard !parts.contains(where: { $0 == ".." || $0 == "." }) else { return nil }
+        return accept(URL(fileURLWithPath: storedPath))
+    }
+
+    static func accept(_ url: URL) -> URL? {
+        guard isLocalFile(url) else { return nil }
+        guard url.path.hasPrefix("/"), url.path != "/" else { return nil }
+        // Refuse traversal segments before standardization collapses them.
+        guard !url.pathComponents.contains(".."), !url.pathComponents.contains(".") else { return nil }
+
+        let lexical = url.standardizedFileURL
+        guard isAbsoluteLocalFile(lexical) else { return nil }
+
+        let resolved = lexical.resolvingSymlinksInPath().standardizedFileURL
+        guard isAbsoluteLocalFile(resolved) else { return nil }
+
+        let boundary = lexical
+            .deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        guard remainsInsideDroppedDirectory(resolved, directory: boundary) else { return nil }
+        guard FileManager.default.fileExists(atPath: resolved.path) else { return nil }
+        return resolved
+    }
+
+    private static func isLocalFile(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        if let host = url.host?.lowercased(), !host.isEmpty, host != "localhost" {
+            return false
+        }
+        return !url.path.contains("\0")
+    }
+
+    private static func isAbsoluteLocalFile(_ url: URL) -> Bool {
+        guard isLocalFile(url) else { return false }
+        let path = url.path
+        guard path.hasPrefix("/"), path != "/" else { return false }
+        return !url.pathComponents.contains("..") && !url.pathComponents.contains(".")
+    }
+
+    /// True when `file` is the dropped path or a descendant of its directory.
+    /// Prefix matching includes the trailing separator so `/Park` does not contain `/ParkEvil`.
+    private static func remainsInsideDroppedDirectory(_ file: URL, directory: URL) -> Bool {
+        let root = directory.standardizedFileURL.path
+        let path = file.standardizedFileURL.path
+        guard root.hasPrefix("/"), path.hasPrefix("/") else { return false }
+        if root == "/" { return path != "/" }
+        let prefix = root.hasSuffix("/") ? root : root + "/"
+        return path.hasPrefix(prefix)
     }
 }
 

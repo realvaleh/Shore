@@ -39,9 +39,10 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 - Not a replacement for the macOS Dock, and not a cartoon skin over app icons
 - Not an always-on dashed tray above the Dock
 - Not an App Store build yet (sandbox is off so MediaRemote now-playing can work)
-- Not signed/notarized in v1 — Gatekeeper will warn until you sign it yourself
+- Not signed with a Developer ID, and not notarized — Gatekeeper will warn until you sign it yourself
+- Not a finished silhouette or shelf. The housing-neck capsule and drag-time shelf are in the tree; spacing, shoulder, and shelf density still need polish
 
-Free island apps already exist. Shore’s wedge is a camera-correct island with file parking that only appears when it is useful, kept original, kept free.
+Free island apps already exist. Shore’s wedge is a camera-housing island with file parking that only appears when it is useful, kept original, kept free. The housing-neck silhouette and the shelf are better than the earlier T-bar and Dock Cove, and they are still an alpha — not commercial island-app polish.
 
 ## Architecture
 
@@ -140,7 +141,19 @@ xcrun notarytool submit dist/Shore-1.0.dmg --keychain-profile <profile> --wait
 xcrun stapler staple dist/Shore-1.0.dmg
 ```
 
-Sandbox is currently **off** (`Shore.entitlements`) so MediaRemote can see now-playing. Revisit sandbox before any App Store submission.
+Sandbox is currently **off** (`Shore.entitlements`) so MediaRemote can see now-playing. Revisit sandbox before any App Store submission. Hardened Runtime is on in the Xcode build settings; v1 is still ad-hoc (`CODE_SIGN_IDENTITY = "-"`), so that is not a notarized or Developer ID build.
+
+## Security
+
+Public alpha. The short version:
+
+- No account, no analytics, no telemetry, and no API keys in the tree. Shore does not ship a network client.
+- Ad-hoc signature only. Not notarized. For a build you compiled or downloaded from this project, right-click Shore.app → **Open** → **Open**. Do not disable Gatekeeper.
+- App Sandbox stays **off** for MediaRemote. Shore does not request Accessibility, Microphone, Camera, Screen Recording, or Automation, and the Apple Events entitlement is not set.
+- The file shelf remembers canonical paths to files you drop. It does not copy them, does not delete them when you clear a token, and does not pass paths to a shell. A symlink that resolves outside the dropped file’s directory is refused.
+- Report issues on [GitHub Issues](https://github.com/realvaleh/Shore/issues). For something that should stay private, use GitHub private vulnerability reporting when it is enabled.
+
+Entitlement rationale, what is not claimed, and how parked paths are checked: [SECURITY.md](SECURITY.md).
 
 ## Layout
 

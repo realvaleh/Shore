@@ -176,9 +176,11 @@ final class MediaRemoteNowPlayingProvider {
     var isAvailable: Bool { handle != nil && getInfo != nil }
 
     init() {
+        // Fixed system path only. RTLD_LOCAL keeps MediaRemote symbols out of the
+        // process-global namespace. Do not dlopen a user-supplied path.
         let opened = dlopen(
             "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote",
-            RTLD_LAZY
+            RTLD_LAZY | RTLD_LOCAL
         )
         let resolvedRegister = Self.symbol(opened, "MRMediaRemoteRegisterForNowPlayingNotifications", as: RegisterFn.self)
         let resolvedUnregister = Self.symbol(opened, "MRMediaRemoteUnregisterForNowPlayingNotifications", as: UnregisterFn.self)
