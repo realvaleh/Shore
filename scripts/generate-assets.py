@@ -5,6 +5,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from island_silhouette import polygon, shoulder_fit
+
 ROOT = Path(__file__).resolve().parents[1]
 ICON_DIR = ROOT / "Shore" / "Assets.xcassets" / "AppIcon.appiconset"
 SHOT_DIR = ROOT / "docs" / "screenshots"
@@ -134,80 +136,12 @@ def draw_pill(base, xy, radius, fill=INK, stroke=(255, 255, 255, 40)):
     return Image.alpha_composite(base, overlay)
 
 
-def cubic(p0, p1, p2, p3, steps=18):
-    pts = []
-    for i in range(steps + 1):
-        t = i / steps
-        u = 1 - t
-        x = u**3 * p0[0] + 3 * u**2 * t * p1[0] + 3 * u * t**2 * p2[0] + t**3 * p3[0]
-        y = u**3 * p0[1] + 3 * u**2 * t * p1[1] + 3 * u * t**2 * p2[1] + t**3 * p3[1]
-        pts.append((x, y))
-    return pts
-
-
-def corner(start, c, end, k=0.62):
-    return cubic(
-        start,
-        (start[0] + (c[0] - start[0]) * k, start[1] + (c[1] - start[1]) * k),
-        (end[0] + (c[0] - end[0]) * k, end[1] + (c[1] - end[1]) * k),
-        end,
-        steps=12,
-    )
-
-
-def island_pts(origin, size, neck_w, neck_h, bottom_r, ear, bend=0.66):
-    """Housing-width top, one cubic shoulder, squircle chin. Mirrors IslandBlendShape."""
-    ox, oy = origin
-    w, h = size
-    neck = min(max(neck_w, 0), w)
-    mid = ox + w / 2
-    neck_left = mid - neck / 2
-    neck_right = neck_left + neck
-    wing = max(0, (w - neck) / 2)
-    br = min(max(bottom_r, 8), max(6, w / 2 - 1), h * 0.48)
-    y_start = oy + min(max(5, neck_h * 0.46), max(5, h - br - 6))
-    opens = wing > 0.8 and (ear > 0.5 or wing > 2)
-    y_belly = y_start
-    if opens:
-        target = oy + neck_h + max(ear, 0)
-        y_belly = min(oy + h - br - 2, max(y_start + 8, target))
-    right = ox + w
-    bottom = oy + h
-    pts = [(neck_left, oy), (neck_right, oy), (neck_right, y_start)]
-    if opens:
-        dy = max(0.01, y_belly - y_start)
-        pts += cubic(
-            (neck_right, y_start),
-            (neck_right, y_start + bend * dy),
-            (right, y_belly - bend * dy),
-            (right, y_belly),
-            28,
-        )[1:]
-    pts.append((right, bottom - br))
-    pts += corner((right, bottom - br), (right, bottom), (right - br, bottom), k=0.55)[1:]
-    pts.append((ox + br, bottom))
-    pts += corner((ox + br, bottom), (ox, bottom), (ox, bottom - br), k=0.55)[1:]
-    side_y = y_belly if opens else y_start
-    pts.append((ox, side_y))
-    if opens:
-        dy = max(0.01, y_belly - y_start)
-        pts += cubic(
-            (ox, y_belly),
-            (ox, y_belly - bend * dy),
-            (neck_left, y_start + bend * dy),
-            (neck_left, y_start),
-            28,
-        )[1:]
-    pts.append((neck_left, oy))
-    return pts
-
-
-def draw_notch_blend(base, body, ear=22, radius=24, neck=(188, 32), fill=BEZEL):
-    """Housing neck + liquid shoulder. `body` is (x0, y0, x1, y1)."""
+def draw_notch_blend(base, body, ear=18, radius=22, neck=(188, 32), fill=BEZEL):
+    """Housing neck + cubic shoulder. `body` is (x0, y0, x1, y1)."""
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
     x0, y0, x1, y1 = body
-    pts = island_pts((x0, y0), (x1 - x0, y1 - y0), neck[0], neck[1], radius, ear)
+    pts = polygon((x0, y0), (x1 - x0, y1 - y0), neck[0], neck[1], radius, ear)
     d.polygon(pts, fill=fill)
     return Image.alpha_composite(base, overlay)
 
@@ -220,58 +154,91 @@ def menu_bar(img):
     return img
 
 
+def _body(neck_w, growth, height):
+    width = neck_w + growth
+    x0 = (1280 - width) / 2
+    return (x0, 0, x0 + width, height), width
+
+
 def island_collapsed(path: Path):
     img = Image.new("RGBA", (1280, 720), DESK_LIP)
     img = menu_bar(img)
-    # Compact capsule: housing-width top, belly holds art + title + waveform.
-    img = draw_notch_blend(img, (514, 0, 766, 96), ear=22, radius=24)
+    # Compact capsule, shelf off: neck through the camera, media in the belly.
+    neck = (188, 32)
+    body, _width = _body(neck[0], 64, 33 + 74)
+    img = draw_notch_blend(img, body, ear=18, radius=22, neck=neck)
+    fit = shoulder_fit((body[0], body[1], body[2] - body[0], body[3] - body[1]), neck[0], neck[1], 22, 18)
+    y = fit["y_belly"] + 8
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((540, 58, 566, 84), radius=7, fill=KELP)
-    d.text((576, 62), "Low Tide", font=font(14, True), fill=FOAM)
-    d.rectangle((724, 64, 727, 78), fill=FOAM)
-    d.rectangle((730, 68, 733, 76), fill=FOAM)
-    d.rectangle((736, 62, 739, 80), fill=FOAM)
-    d.rectangle((742, 66, 745, 74), fill=FOAM)
-    d.text((40, 660), "Design placeholder · Compact capsule growing from the housing", font=font(14), fill=(90, 94, 98, 220))
+    d.rounded_rectangle((body[0] + 18, y, body[0] + 46, y + 28), radius=8, fill=KELP)
+    d.text((body[0] + 56, y + 6), "Low Tide", font=font(14, True), fill=FOAM)
+    bx = body[2] - 36
+    for i, h in enumerate((12, 7, 14, 8, 10)):
+        d.rectangle((bx + i * 5, y + 16 - h, bx + 2 + i * 5, y + 16), fill=SEA)
+    d.text((40, 660), "Design placeholder · Compact capsule, shoulder below the camera housing", font=font(14), fill=(90, 94, 98, 220))
     img.convert("RGB").save(path, quality=92)
 
 
 def island_expanded(path: Path):
     img = Image.new("RGBA", (1280, 720), DESK_LIP)
     img = menu_bar(img)
-    img = draw_notch_blend(img, (456, 0, 824, 268), ear=36, radius=22)
+    neck = (188, 32)
+    width = max(368, neck[0] + 160)
+    x0 = (1280 - width) / 2
+    body = (x0, 0, x0 + width, 33 + 208 + 44)
+    img = draw_notch_blend(img, body, ear=30, radius=26, neck=neck)
+    fit = shoulder_fit((body[0], body[1], width, body[3]), neck[0], neck[1], 26, 30)
+    y = fit["y_belly"] + 8
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((484, 76, 548, 140), radius=14, fill=KELP)
-    d.text((564, 80), "Low Tide", font=font(18, True), fill=FOAM)
-    d.text((564, 106), "Still Harbor · sample", font=font(12), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
-    d.rounded_rectangle((484, 156, 790, 160), radius=2, fill=(255, 255, 255, 28))
-    d.rounded_rectangle((484, 156, 600, 160), radius=2, fill=SEA)
-    d.polygon((520, 188, 508, 196, 520, 204), fill=FOAM)
-    d.ellipse((536, 176, 576, 216), fill=FOAM)
-    d.polygon((592, 188, 604, 196, 592, 204), fill=FOAM)
-    d.rounded_rectangle((680, 184, 728, 208), radius=8, fill=(255, 255, 255, 22))
-    d.text((690, 188), "87%", font=font(10), fill=FOAM)
-    d.rounded_rectangle((736, 184, 776, 208), radius=8, fill=(255, 255, 255, 22))
-    d.text((746, 188), "42", font=font(10), fill=FOAM)
-    d.rounded_rectangle((484, 224, 790, 256), radius=12, fill=(255, 255, 255, 16), outline=(*SEA[:3], 180))
-    d.text((496, 232), "notes.pdf   ×     shot.png   ×", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 210))
-    d.text((40, 660), "Design placeholder · Same path, player below the housing, shelf in the belly", font=font(14), fill=(90, 94, 98, 220))
+    d.rounded_rectangle((x0 + 18, y, x0 + 82, y + 64), radius=14, fill=KELP, outline=(255, 255, 255, 46))
+    d.text((x0 + 96, y + 8), "Low Tide", font=font(18, True), fill=FOAM)
+    d.text((x0 + 96, y + 34), "Still Harbor · sample", font=font(12), fill=(FOAM[0], FOAM[1], FOAM[2], 160))
+    seek_y = y + 78
+    d.rounded_rectangle((x0 + 18, seek_y, body[2] - 18, seek_y + 5), radius=2, fill=(255, 255, 255, 36))
+    d.rounded_rectangle((x0 + 18, seek_y, x0 + 150, seek_y + 5), radius=2, fill=SEA)
+    play_y = seek_y + 22
+    d.polygon((x0 + 36, play_y + 6, x0 + 24, play_y + 14, x0 + 36, play_y + 22), fill=FOAM)
+    d.ellipse((x0 + 52, play_y, x0 + 88, play_y + 36), fill=FOAM)
+    d.polygon((x0 + 108, play_y + 6, x0 + 120, play_y + 14, x0 + 108, play_y + 22), fill=FOAM)
+    d.rounded_rectangle((body[2] - 118, play_y + 6, body[2] - 70, play_y + 30), radius=10, fill=(255, 255, 255, 22))
+    d.text((body[2] - 108, play_y + 10), "87%", font=font(10), fill=FOAM)
+    d.rounded_rectangle((body[2] - 62, play_y + 6, body[2] - 18, play_y + 30), radius=10, fill=(255, 255, 255, 22))
+    d.text((body[2] - 50, play_y + 10), "42", font=font(10), fill=FOAM)
+    shelf_y = body[3] - 12 - 44
+    d.rounded_rectangle((x0 + 18, shelf_y, body[2] - 18, shelf_y + 40), radius=12, fill=(255, 255, 255, 18))
+    d.rounded_rectangle((x0 + 28, shelf_y + 8, x0 + 168, shelf_y + 32), radius=12, fill=(255, 255, 255, 28))
+    d.text((x0 + 40, shelf_y + 12), "notes.pdf   ×", font=font(11), fill=FOAM)
+    d.rounded_rectangle((x0 + 176, shelf_y + 8, x0 + 300, shelf_y + 32), radius=12, fill=(255, 255, 255, 28))
+    d.text((x0 + 188, shelf_y + 12), "shot.png   ×", font=font(11), fill=FOAM)
+    d.text((40, 660), "Design placeholder · Player and dense shelf sit in the belly, not the shoulder", font=font(14), fill=(90, 94, 98, 220))
     img.convert("RGB").save(path, quality=92)
 
 
 def cove(path: Path):
     img = Image.new("RGBA", (1280, 720), DESK_LIP)
     img = menu_bar(img)
-    # Island drop well while a drag is in flight, plus a basket under it — not a Dock tray.
-    img = draw_notch_blend(img, (514, 0, 766, 150), ear=22, radius=22)
+    # Empty well turns sea-glass while a drag is in flight. Basket is separate, not a Dock tray.
+    neck = (188, 32)
+    body, _width = _body(neck[0], 64, 33 + 74 + 44)
+    img = draw_notch_blend(img, body, ear=18, radius=22, neck=neck)
+    fit = shoulder_fit((body[0], body[1], body[2] - body[0], body[3] - body[1]), neck[0], neck[1], 22, 18)
+    y = fit["y_belly"] + 8
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((540, 58, 566, 84), radius=7, fill=KELP)
-    d.text((576, 62), "Low Tide", font=font(14, True), fill=FOAM)
-    d.rounded_rectangle((534, 100, 746, 136), radius=12, fill=(255, 255, 255, 28), outline=SEA, width=2)
-    d.text((548, 110), "Release to park", font=font(13, True), fill=FOAM)
-    d.rounded_rectangle((500, 168, 760, 220), radius=26, fill=BEZEL, outline=SEA, width=2)
-    d.text((528, 182), "Park on Shore", font=font(13, True), fill=FOAM)
-    d.text((528, 200), "Drop to park on the island", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
+    d.rounded_rectangle((body[0] + 18, y, body[0] + 46, y + 28), radius=8, fill=KELP)
+    d.text((body[0] + 56, y + 6), "Low Tide", font=font(14, True), fill=FOAM)
+    well_y = body[3] - 8 - 44
+    d.rounded_rectangle(
+        (body[0] + 16, well_y, body[2] - 16, well_y + 40),
+        radius=12,
+        fill=(*SEA[:3], 70),
+        outline=SEA,
+        width=2,
+    )
+    d.text((body[0] + 32, well_y + 11), "Release to park", font=font(13, True), fill=FOAM)
+    basket_y = body[3] + 18
+    d.rounded_rectangle((500, basket_y, 760, basket_y + 52), radius=26, fill=BEZEL, outline=SEA, width=2)
+    d.text((528, basket_y + 10), "Park on Shore", font=font(13, True), fill=FOAM)
+    d.text((528, basket_y + 28), "Drop to park on the island", font=font(11), fill=(FOAM[0], FOAM[1], FOAM[2], 150))
     d.text((40, 660), "Design placeholder · Drag-only basket under the island, not a Dock strip", font=font(14), fill=(90, 94, 98, 220))
     img.convert("RGB").save(path, quality=92)
 

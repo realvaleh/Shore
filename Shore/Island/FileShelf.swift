@@ -83,20 +83,20 @@ struct FileShelfView: View {
     private var hot: Bool { targeted || highlighted }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: hot ? "arrow.down.circle.fill" : (store.items.isEmpty ? "plus.circle" : "tray.fill"))
                 .font(.system(size: compact ? 12 : 13, weight: .semibold))
-                .foregroundStyle(hot ? ShorePalette.seaGlass : ShorePalette.foam.opacity(0.8))
-                .frame(width: 16)
+                .foregroundStyle(hot ? ShorePalette.seaGlass : ShorePalette.foam.opacity(0.82))
+                .frame(width: 18, height: 18)
             if store.items.isEmpty {
                 Text(hot ? "Release to park" : "Drop files to park")
                     .font(ShoreType.title(compact ? 11 : 12))
-                    .foregroundStyle(ShorePalette.foam.opacity(hot ? 0.95 : 0.72))
+                    .foregroundStyle(ShorePalette.foam.opacity(hot ? 1 : 0.82))
                     .lineLimit(1)
                 Spacer(minLength: 0)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         ForEach(store.items) { item in
                             FileShelfToken(item: item) {
                                 store.remove(item.id)
@@ -106,27 +106,29 @@ struct FileShelfView: View {
                 }
                 Button(action: { store.clear() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ShorePalette.foam.opacity(0.45))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(ShorePalette.foam.opacity(0.55))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Clear parked files")
                 .accessibilityLabel("Clear parked files")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, compact ? 4 : 6)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: compact ? 12 : 14, style: .continuous)
-                .fill(Color.white.opacity(hot ? 0.16 : 0.07))
+            RoundedRectangle(cornerRadius: compact ? 11 : 13, style: .continuous)
+                .fill(hot ? ShorePalette.seaGlass.opacity(0.20) : Color.white.opacity(store.items.isEmpty ? 0.05 : 0.07))
                 .overlay {
-                    RoundedRectangle(cornerRadius: compact ? 12 : 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: compact ? 11 : 13, style: .continuous)
                         .strokeBorder(
-                            hot ? ShorePalette.seaGlass.opacity(0.95) : Color.white.opacity(store.items.isEmpty ? 0.28 : 0.12),
+                            hot ? ShorePalette.seaGlass.opacity(0.95) : Color.white.opacity(store.items.isEmpty ? 0.42 : 0.12),
                             style: StrokeStyle(
                                 lineWidth: hot ? 1.5 : 1,
-                                dash: (hot || !store.items.isEmpty) ? [] : [3, 3]
+                                dash: (hot || !store.items.isEmpty) ? [] : [4, 3]
                             )
                         )
                 }
@@ -283,40 +285,49 @@ struct FileShelfToken: View {
     var onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 16, height: 16)
-            Text(item.name)
-                .font(ShoreType.chip(11))
-                .foregroundStyle(ShorePalette.foam)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 92, alignment: .leading)
+        HStack(spacing: 0) {
+            HStack(spacing: 5) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 14, height: 14)
+                Text(item.name)
+                    .font(ShoreType.chip(11))
+                    .foregroundStyle(ShorePalette.foam)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 76, alignment: .leading)
+            }
+            .contentShape(Capsule())
+            .accessibilityLabel(item.name)
+            .accessibilityHint("Drag out of the island to take it back")
+            .onDrag {
+                NSItemProvider(object: item.url as NSURL)
+            } preview: {
+                FileShelfDragChip(name: item.name)
+            }
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.8))
-                    .frame(width: 14, height: 14)
-                    .background(Circle().fill(Color.white.opacity(0.14)))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(ShorePalette.foam.opacity(0.9))
+                    .frame(width: 16, height: 16)
+                    .background(Circle().fill(Color.white.opacity(0.16)))
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remove \(item.name)")
         }
-        .padding(.leading, 7)
-        .padding(.trailing, 4)
-        .padding(.vertical, 4)
+        .padding(.leading, 6)
+        .padding(.trailing, 1)
+        .padding(.vertical, 1)
         .background {
             Capsule(style: .continuous)
                 .fill(Color.white.opacity(0.10))
                 .overlay {
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.6)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
                 }
-        }
-        .onDrag {
-            NSItemProvider(object: item.url as NSURL)
         }
         .contextMenu {
             Button("Reveal in Finder") {
@@ -325,7 +336,34 @@ struct FileShelfToken: View {
             Button("Remove", action: onRemove)
         }
         .help("Drag out to take \(item.name) back, or click × to remove")
-        .accessibilityLabel(item.name)
-        .accessibilityHint("Drag out of the island, or activate to remove")
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Compact drag image so pulling a token out does not snapshot the whole shelf row.
+private struct FileShelfDragChip: View {
+    var name: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(ShorePalette.seaGlass)
+            Text(name)
+                .font(ShoreType.chip(11))
+                .foregroundStyle(ShorePalette.foam)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background {
+            Capsule(style: .continuous)
+                .fill(ShorePalette.bezel)
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(ShorePalette.seaGlass.opacity(0.85), lineWidth: 1)
+                }
+        }
     }
 }

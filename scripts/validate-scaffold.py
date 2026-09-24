@@ -22,6 +22,85 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_island_silhouette() -> None:
+    """The neck stays housing-width beside the menu bar, then swells. Not a T, not a tab."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from island_silhouette import BELLY_GAP, NECK_COVER, SHOULDER_BEND, contains, polygon, span_at
+
+    theme = read(ROOT / "Shore/Design/ShoreTheme.swift")
+    needles = (
+        "static let neckCover: CGFloat = 0.70",
+        "static let shoulderBend: CGFloat = 0.52",
+        "static let shoulderRunMin: CGFloat = 20",
+        "static let shoulderRunMax: CGFloat = 56",
+        "static let bellyContentGap: CGFloat = 8",
+        "earRadius * 0.70 + wing * 0.34",
+        "let opens = wing > 1.5",
+        "func shoulderFit(",
+        "func contentInset(",
+        "Keep in lockstep with `scripts/island_silhouette.py`",
+    )
+    for needle in needles:
+        if needle not in theme:
+            err(f"island shoulder formula drifted from scripts/island_silhouette.py: {needle}")
+    if abs(NECK_COVER - 0.70) > 1e-9 or abs(SHOULDER_BEND - 0.52) > 1e-9 or abs(BELLY_GAP - 8) > 1e-9:
+        err("python silhouette constants drifted from the Swift neck cover")
+
+    views = read(ROOT / "Shore/Island/IslandViews.swift")
+    if "contentInset(" not in views:
+        err("island content must use IslandMetrics.contentInset so it tracks the belly")
+
+    def width_at(pts, y):
+        span = span_at(pts, y)
+        if span is None:
+            return None
+        return span[1] - span[0]
+
+    # Plausible 14-inch housing. Rest must not flare.
+    rest = polygon((0, 0), (184, 33), 184, 32, 13, 0)
+    rest_top = width_at(rest, 4)
+    if rest_top is None or abs(rest_top - 184) > 1.5:
+        err(f"rest silhouette must stay housing width, got {rest_top}")
+    if contains(rest, -4, 6) or contains(rest, 190, 6):
+        err("rest hit testing must not extend beside the housing")
+
+    # Compact: upper housing is still the neck (menu-bar items stay clickable).
+    compact = polygon((0, 0), (248, 33 + 74 + 44), 184, 32, 22, 18)
+    upper = width_at(compact, 32 * 0.45)
+    if upper is None or abs(upper - 184) > 1.5:
+        err(f"compact shoulder must not flare in the upper housing, width {upper}")
+    beside = contains(compact, (248 - 184) / 2 - 8, 6)
+    if beside:
+        err("a point beside the neck near the bezel must miss the silhouette")
+    if not contains(compact, 124, 90):
+        err("compact belly center must accept hits")
+
+    # Pinned: shoulder has actually opened by the time the belly is full, and the
+    # top is still the neck. A body-width top is the old status-bar tab.
+    pinned_w = max(368, 184 + 160)
+    pinned_h = 33 + 208 + 44
+    pinned = polygon((0, 0), (pinned_w, pinned_h), 184, 32, 26, 30)
+    pinned_top = width_at(pinned, 4)
+    if pinned_top is None or abs(pinned_top - 184) > 1.5:
+        err(f"pinned top must be the housing neck, not the belly, width {pinned_top}")
+    belly = width_at(pinned, pinned_h * 0.55)
+    if belly is None or belly < pinned_w - 8:
+        err(f"pinned belly must reach full width, got {belly}")
+    # Flare begins only after most of the camera is covered.
+    grew = None
+    y = 8.0
+    while y < pinned_h:
+        w = width_at(pinned, y)
+        if w is not None and w > 184 + 8:
+            grew = y
+            break
+        y += 0.5
+    if grew is None or grew < 32 * 0.62:
+        err(f"shoulder must stay neck-width through most of the housing, flare y={grew}")
+
+
 def test_park_boundary() -> None:
     """Mirror of ParkedFilePath's lexical gate and directory containment."""
 
@@ -350,6 +429,7 @@ def main() -> int:
                 err(f"{path.relative_to(ROOT)} mentions {word}")
 
     test_park_boundary()
+    test_island_silhouette()
 
     if errors:
         print("Scaffold validation failed:")
