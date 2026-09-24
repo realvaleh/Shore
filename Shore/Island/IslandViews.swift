@@ -91,7 +91,9 @@ struct IslandRootView: View {
             IslandCanvas(
                 stage: stage,
                 hugsNotch: session.hugsNotch,
+                notchWidth: session.notchWidth,
                 notchHeight: session.notchHeight,
+                chromeSize: chromeSize,
                 info: nowPlaying.info,
                 source: nowPlaying.source,
                 chips: chips,
@@ -127,7 +129,9 @@ struct IslandRootView: View {
 private struct IslandCanvas: View {
     var stage: IslandStage
     var hugsNotch: Bool
+    var notchWidth: CGFloat
     var notchHeight: CGFloat
+    var chromeSize: CGSize
     var info: NowPlayingInfo
     var source: NowPlayingSource
     @ObservedObject var chips: LiveChipStore
@@ -143,13 +147,17 @@ private struct IslandCanvas: View {
 
     private var isPinned: Bool { stage == .pinned }
     private var showsContent: Bool { !(hugsNotch && stage == .rest) }
-    private var artSize: CGFloat { isPinned ? 64 : 26 }
-    /// Content starts where the belly is full width, below the housing shoulder.
+    private var artSize: CGFloat { isPinned ? 64 : 28 }
+    private var artRadius: CGFloat { isPinned ? 14 : 8 }
+    /// Same shoulder fit as the silhouette, so the row sits in the belly instead of the curve.
     private var contentTop: CGFloat {
-        guard hugsNotch else { return isPinned ? 14 : 8 }
-        if stage == .rest { return notchHeight }
-        let belly = isPinned ? IslandMetrics.pinnedEarRadius : IslandMetrics.compactEarRadius
-        return notchHeight + belly
+        IslandMetrics.contentInset(
+            hugsNotch: hugsNotch,
+            pinned: isPinned,
+            hovering: stage != .rest,
+            notch: CGSize(width: notchWidth, height: notchHeight),
+            chrome: chromeSize
+        )
     }
     private var shelfOpen: Bool { fileShelfEnabled && stage != .rest }
     private var volumeHUD: LiveChip? {
@@ -172,11 +180,12 @@ private struct IslandCanvas: View {
                     .frame(height: shelfOpen ? IslandMetrics.shelfHeight : 0)
                     .clipped()
                     .opacity(shelfOpen ? 1 : 0)
+                    .padding(.top, shelfOpen ? 4 : 0)
             }
         }
         .padding(.top, contentTop)
         .padding(.horizontal, isPinned ? 18 : 16)
-        .padding(.bottom, isPinned ? 12 : 10)
+        .padding(.bottom, isPinned ? 12 : 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .topTrailing) { collapseButton }
         .opacity(showsContent ? 1 : 0)
@@ -198,12 +207,12 @@ private struct IslandCanvas: View {
                 lineLimit: 1
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 16)
+            .frame(height: 18)
             .layoutPriority(1)
             TideBars(isPlaying: info.isPlaying, reduceMotion: reduceMotion)
-                .frame(width: 16)
-                .opacity(info.hasTrack ? 1 : 0.45)
+                .opacity(info.hasTrack ? 1 : 0.4)
         }
+        .frame(height: 32)
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
     }
@@ -211,12 +220,12 @@ private struct IslandCanvas: View {
     /// Player under the housing. Title column is alone; chips live on the transport row.
     private var pinnedPlayer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
                 artwork
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     ShoreMarquee(
                         text: info.hasTrack ? info.title : "Nothing playing",
-                        font: ShoreType.title(15),
+                        font: ShoreType.title(16),
                         color: ShorePalette.foam,
                         reduceMotion: reduceMotion,
                         lineLimit: 1
@@ -224,25 +233,25 @@ private struct IslandCanvas: View {
                     .frame(height: 20)
                     Text(subtitle)
                         .font(ShoreType.body(12))
-                        .foregroundStyle(ShorePalette.foam.opacity(0.58))
+                        .foregroundStyle(ShorePalette.foam.opacity(0.62))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
-                .padding(.trailing, 22)
+                .padding(.trailing, 32)
             }
             seekRow
                 .frame(height: 16)
-            HStack(spacing: 12) {
-                HStack(spacing: 18) {
+            HStack(alignment: .center, spacing: 0) {
+                HStack(spacing: 14) {
                     IconButton(systemName: "backward.fill", action: onPrevious)
                         .accessibilityLabel("Back 10 seconds")
                     Button(action: onTogglePlay) {
                         Image(systemName: info.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(ShorePalette.ink)
-                            .frame(width: 32, height: 32)
+                            .frame(width: 36, height: 36)
                             .background(Circle().fill(ShorePalette.foam))
                     }
                     .buttonStyle(.plain)
@@ -250,7 +259,7 @@ private struct IslandCanvas: View {
                     IconButton(systemName: "forward.fill", action: onNext)
                         .accessibilityLabel("Forward 10 seconds")
                 }
-                Spacer(minLength: 12)
+                Spacer(minLength: 16)
                 ChipRow(store: chips, compact: false)
                     .fixedSize(horizontal: true, vertical: false)
             }
@@ -263,12 +272,13 @@ private struct IslandCanvas: View {
             Button(action: onCollapse) {
                 Image(systemName: "chevron.compact.up")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(ShorePalette.foam.opacity(0.55))
-                    .frame(width: 22, height: 22)
+                    .foregroundStyle(ShorePalette.foam.opacity(0.62))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, contentTop + 2)
-            .padding(.trailing, 12)
+            .padding(.top, contentTop - 2)
+            .padding(.trailing, 10)
             .accessibilityLabel("Collapse island")
             .accessibilityHint("Or click outside the island")
         }
@@ -284,13 +294,13 @@ private struct IslandCanvas: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.10))
+                        .fill(Color.white.opacity(0.14))
                     Capsule()
                         .fill(ShorePalette.seaGlass.opacity(0.95))
                         .frame(width: max(4, geo.size.width * info.progress))
                 }
             }
-            .frame(height: 4)
+            .frame(height: 5)
             Text("-\(ShoreTime.clock(max(0, info.duration - info.elapsed)))")
                 .font(ShoreType.chip(10))
                 .foregroundStyle(ShorePalette.foam.opacity(0.45))
@@ -317,7 +327,11 @@ private struct IslandCanvas: View {
             }
         }
         .frame(width: artSize, height: artSize)
-        .clipShape(RoundedRectangle(cornerRadius: isPinned ? 14 : 7, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: artRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: artRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(isPinned ? 0.18 : 0.12), lineWidth: 0.7)
+        }
         .accessibilityHidden(true)
     }
 
@@ -365,9 +379,10 @@ private struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(ShorePalette.foam.opacity(0.86))
-                .frame(width: 28, height: 28)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ShorePalette.foam.opacity(0.9))
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

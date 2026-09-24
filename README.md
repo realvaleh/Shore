@@ -40,7 +40,7 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 - Not an always-on dashed tray above the Dock
 - Not an App Store build yet (sandbox is off so MediaRemote now-playing can work)
 - Not signed with a Developer ID, and not notarized — Gatekeeper will warn until you sign it yourself
-- Not a finished silhouette or shelf. The housing-neck capsule and drag-time shelf are in the tree; spacing, shoulder, and shelf density still need polish
+- Not signed off on a Mac notch yet. The housing-neck shoulder, belly spacing, shelf density, and now-playing chrome are polished in source; Valeh still has to confirm the island on his hardware before this is treated as done
 
 Free island apps already exist. Shore’s wedge is a camera-housing island with file parking that only appears when it is useful, kept original, kept free. The housing-neck silhouette and the shelf are better than the earlier T-bar and Dock Cove, and they are still an alpha — not commercial island-app polish.
 
@@ -62,8 +62,8 @@ Shore.app (SwiftUI, macOS 14+, Swift 6)
 
 | Module | Behavior |
 | --- | --- |
-| Island | Rest covers the hardware notch (`#000000`, flush top, rounded chin, no stroke or shadow). Hover and pin morph **one** path: the top stays housing-width, a cubic shoulder swells into the belly, the bottom stays a squircle. Compact is a single capsule (art + title + waveform). Click pins the player (art, title, seek, controls). Chips sit on the transport row, never on the title. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
-| File shelf | Island tray. A dashed well while empty; sea-glass “Release to park” while a file is over the island. Tokens show the file icon, name, a remove button, and drag back out. Independent settings toggle. |
+| Island | Rest covers the hardware notch (`#000000`, flush top, rounded chin, no stroke or shadow). Hover and pin morph **one** path: the neck stays housing-width through most of the camera, then one cubic shoulder swells into the belly (long enough that it does not read as a T). Media sits just below where the belly is full width. Compact is a single capsule (art + title + waveform; titles ellipsize when Reduce Motion is on). Click pins the player (art, title, seek, controls). Chips sit on the transport row, never on the title. Click outside collapses. Explicit collapse (chevron) ignores hover until the pointer leaves. Hit-testing follows the silhouette so menu-bar items beside the notch stay clickable. |
+| File shelf | Island tray under the player. Empty state is a dashed well (“Drop files to park”); a file over the island turns it sea-glass and reads “Release to park”. Tokens are dense — icon, middle-truncated name, drag back out — and the remove control’s hit target is larger than the glyph. Independent settings toggle. |
 | Drag basket | Not a Dock overlay. A true-black capsule that appears only while a Finder file drag is in flight, under the pointer or just below the island so it does not cover the shelf. Drops land on the same shelf. The macOS Dock is left alone. |
 | Settings | Independent toggles. Optional sample track (“Low Tide”) when MediaRemote is empty — useful on Linux-less design machines and when nothing is playing. |
 
@@ -73,7 +73,7 @@ Apple Silicon is the v1 target (`ARCHS=arm64` in the DMG script). Intel is a Uni
 
 ## Design
 
-Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one silhouette: the housing at rest, then a shoulder that swells into a capsule. The same spring runs expand and collapse. Reduce Motion shortens the morph and stills the waveform.
+Original **tidal glass** language — bezel-black notch hug (`#000000`), sea-glass accent, rounded SF. The island is one silhouette: the housing at rest, then a shoulder that leaves the lower part of the camera housing and swells into a capsule. Content is inset to that belly. The same spring runs expand and collapse. Reduce Motion shortens the morph, stills the waveform, and ellipsizes titles instead of scrolling them.
 
 Design placeholders (not live Mac screenshots):
 

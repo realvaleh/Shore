@@ -20,19 +20,28 @@ enum IslandMetrics {
     /// How far the capsule swells past the housing. Kept short so compact stays one pill.
     static let compactGrowth: CGFloat = 64
     /// Media block under the housing. The shelf, when open, is added separately.
-    static let compactLip: CGFloat = 64
+    static let compactLip: CGFloat = 74
     static let expandedSize = CGSize(width: 368, height: 188)
-    static let expandedLip: CGFloat = 184
+    static let expandedLip: CGFloat = 208
     static let floatingGap: CGFloat = 8
-    static let shelfHeight: CGFloat = 50
-    /// Hardware chin. Tight, so rest covers the camera housing instead of drawing a pill under it.
-    static let restCornerRadius: CGFloat = 11
-    static let compactCornerRadius: CGFloat = 24
-    static let pinnedCornerRadius: CGFloat = 22
-    /// 0 at rest. When open, distance below the housing where the belly reaches full width.
+    /// Parked-token band. Short enough to feel dense; tall enough for a 26pt remove target.
+    static let shelfHeight: CGFloat = 44
+    /// Hardware chin. Full enough to meet the camera housing, not a floating pill.
+    static let restCornerRadius: CGFloat = 13
+    static let compactCornerRadius: CGFloat = 22
+    static let pinnedCornerRadius: CGFloat = 26
+    /// 0 at rest. Open ears lengthen the shoulder; they do not paint a stem.
     static let restEarRadius: CGFloat = 0
-    static let compactEarRadius: CGFloat = 22
-    static let pinnedEarRadius: CGFloat = 36
+    static let compactEarRadius: CGFloat = 18
+    static let pinnedEarRadius: CGFloat = 30
+    /// Straight neck covers this fraction of the camera housing before the shoulder leaves it.
+    static let neckCover: CGFloat = 0.70
+    /// Cubic handle as a fraction of the shoulder run. Rounder than a late snap, so the join is not a T.
+    static let shoulderBend: CGFloat = 0.52
+    static let shoulderRunMin: CGFloat = 20
+    static let shoulderRunMax: CGFloat = 56
+    /// Air between the full-width belly and the first content row.
+    static let bellyContentGap: CGFloat = 8
     static let blendRadius: CGFloat = pinnedCornerRadius
     static let invertedRadius: CGFloat = pinnedEarRadius
     static let hoverSlopEnter: CGFloat = 16
@@ -52,6 +61,89 @@ enum IslandMetrics {
         if hovering { return compactEarRadius }
         return restEarRadius
     }
+
+    /// Housing neck, one cubic shoulder, squircle chin.
+    ///
+    /// The neck stays at the camera width through `neckCover` of the housing so menu-bar
+    /// items beside the notch stay outside the silhouette. The shoulder run scales with
+    /// the ear and the wing: compact stays short, pinned gets a longer swell, and a wide
+    /// body can never collapse into a diagonal or a hard T.
+    /// Keep in lockstep with `scripts/island_silhouette.py`.
+    static func shoulderFit(
+        in rect: CGRect,
+        notchWidth: CGFloat,
+        notchHeight: CGFloat,
+        cornerRadius: CGFloat,
+        earRadius: CGFloat
+    ) -> IslandShoulderFit {
+        let neck = min(max(notchWidth, 0), rect.width)
+        let neckLeft = rect.midX - neck / 2
+        let neckRight = neckLeft + neck
+        let wing = max(0, (rect.width - neck) / 2)
+        let bottomRadius = min(
+            max(cornerRadius, 8),
+            max(6, rect.width / 2 - 1),
+            rect.height * 0.46
+        )
+        let housing = max(0, notchHeight)
+        let yStartCap = max(8, rect.height - bottomRadius - 8)
+        let yStart = rect.minY + min(max(8, housing * neckCover), yStartCap)
+        let opens = wing > 1.5
+        var yBelly = yStart
+        if opens {
+            let run = min(
+                shoulderRunMax,
+                max(shoulderRunMin, earRadius * 0.70 + wing * 0.34)
+            )
+            let target = max(yStart + run, rect.minY + housing + 4)
+            yBelly = min(rect.maxY - bottomRadius - 4, target)
+            if yBelly < yStart + 14 {
+                yBelly = min(rect.maxY - bottomRadius - 2, yStart + 14)
+            }
+        }
+        return IslandShoulderFit(
+            neckLeft: neckLeft,
+            neckRight: neckRight,
+            yStart: yStart,
+            yBelly: yBelly,
+            bottomRadius: bottomRadius,
+            opens: opens
+        )
+    }
+
+    /// Top inset so media sits in the full-width belly, just under the shoulder.
+    static func contentInset(
+        hugsNotch: Bool,
+        pinned: Bool,
+        hovering: Bool,
+        notch: CGSize,
+        chrome: CGSize
+    ) -> CGFloat {
+        guard hugsNotch else { return pinned ? 16 : 10 }
+        guard hovering || pinned, notch.height > 0, chrome.height > 1 else {
+            return max(0, notch.height)
+        }
+        let fit = shoulderFit(
+            in: CGRect(origin: .zero, size: chrome),
+            notchWidth: notch.width,
+            notchHeight: notch.height,
+            cornerRadius: cornerRadius(pinned: pinned, hovering: hovering),
+            earRadius: earRadius(pinned: pinned, hovering: hovering)
+        )
+        let inset = fit.yBelly + bellyContentGap
+        return min(max(notch.height, inset), max(notch.height, chrome.height - 36))
+    }
+}
+
+/// Resolved housing-neck geometry for one chrome rect. SwiftUI y-down.
+struct IslandShoulderFit: Equatable {
+    var neckLeft: CGFloat
+    var neckRight: CGFloat
+    var yStart: CGFloat
+    /// Y where the side has reached the full body width.
+    var yBelly: CGFloat
+    var bottomRadius: CGFloat
+    var opens: Bool
 }
 
 extension Animation {
@@ -81,8 +173,9 @@ enum ShoreType {
 /// The top segment is the camera housing, flush with the bezel — never the full
 /// body width (that paints a status-bar tab and squared corners into the menu bar).
 /// When the body is wider, a single cubic shoulder with vertical tangents swells
-/// from the housing into the belly. Rest (no wing) degenerates to the housing:
-/// flush top, straight sides, rounded chin. Same path family at every stage.
+/// from the lower housing into the belly — long enough that the join is not a T,
+/// late enough that the upper housing stays neck-width. Rest (no wing) degenerates
+/// to the housing: flush top, straight sides, rounded chin. Same path family at every stage.
 struct IslandBlendShape: InsettableShape {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
@@ -155,41 +248,14 @@ struct IslandBlendShape: InsettableShape {
         return path(in: CGRect(origin: .zero, size: chromeRect.size)).contains(local)
     }
 
-    private struct Shoulder {
-        var neckLeft: CGFloat
-        var neckRight: CGFloat
-        var yStart: CGFloat
-        /// Y where the side has reached the full body width.
-        var yBelly: CGFloat
-        var bottomRadius: CGFloat
-        var opens: Bool
-    }
-
     /// Housing neck on top, one cubic shoulder, squircle chin. Rest collapses the shoulder.
-    private func shoulder(in rect: CGRect) -> Shoulder {
-        let neck = min(max(notchWidth, 0), rect.width)
-        let neckLeft = rect.midX - neck / 2
-        let neckRight = neckLeft + neck
-        let wing = max(0, (rect.width - neck) / 2)
-        let bottomRadius = min(
-            max(cornerRadius, 8),
-            max(6, rect.width / 2 - 1),
-            rect.height * 0.48
-        )
-        let yStart = min(max(5, notchHeight * 0.46), max(5, rect.height - bottomRadius - 6))
-        let opens = wing > 0.8 && (earRadius > 0.5 || wing > 2)
-        var yBelly = yStart
-        if opens {
-            let target = notchHeight + max(earRadius, 0)
-            yBelly = min(rect.height - bottomRadius - 2, max(yStart + 8, target))
-        }
-        return Shoulder(
-            neckLeft: neckLeft,
-            neckRight: neckRight,
-            yStart: yStart,
-            yBelly: yBelly,
-            bottomRadius: bottomRadius,
-            opens: opens
+    private func shoulder(in rect: CGRect) -> IslandShoulderFit {
+        IslandMetrics.shoulderFit(
+            in: rect,
+            notchWidth: notchWidth,
+            notchHeight: notchHeight,
+            cornerRadius: cornerRadius,
+            earRadius: earRadius
         )
     }
 
@@ -204,7 +270,7 @@ struct IslandBlendShape: InsettableShape {
 
         // Cubic kappa is Shore's squircle language (not a circular quad).
         let squircle: CGFloat = 0.55
-        let bend: CGFloat = 0.66
+        let bend = IslandMetrics.shoulderBend
         let fit = shoulder(in: rect)
         let left = rect.minX
         let right = rect.maxX
@@ -440,21 +506,21 @@ struct TideBars: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: reduceMotion || !isPlaying ? 10 : 0.11, paused: reduceMotion || !isPlaying)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(0..<4, id: \.self) { index in
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(0..<5, id: \.self) { index in
                     Capsule(style: .continuous)
-                        .fill(ShorePalette.foam.opacity(isPlaying ? 0.92 : 0.35))
+                        .fill(isPlaying ? ShorePalette.seaGlass.opacity(0.95) : ShorePalette.foam.opacity(0.32))
                         .frame(width: 2, height: barHeight(index: index, t: t))
                 }
             }
-            .frame(height: 12, alignment: .bottom)
+            .frame(width: 18, height: 14, alignment: .bottom)
         }
     }
 
     private func barHeight(index: Int, t: TimeInterval) -> CGFloat {
-        guard isPlaying, !reduceMotion else { return 4 }
-        let phase = t * (2.1 + Double(index) * 0.35) + Double(index)
-        return 4 + CGFloat((sin(phase) + 1) / 2) * 8
+        guard isPlaying, !reduceMotion else { return 3 }
+        let phase = t * (1.9 + Double(index) * 0.28) + Double(index) * 0.7
+        return 3 + CGFloat((sin(phase) + 1) / 2) * 11
     }
 }
 
@@ -475,17 +541,28 @@ struct ShoreMarquee: View {
             let looping = overflow > 6 && !reduceMotion && lineLimit == 1
             TimelineView(.animation(minimumInterval: looping ? 1 / 30 : 8, paused: !looping)) { timeline in
                 let travel = looping ? marqueeTravel(overflow: overflow, at: timeline.date) : 0
-                HStack(spacing: 36) {
-                    labeled
-                    if looping { labeled }
+                Group {
+                    if looping {
+                        HStack(spacing: 36) {
+                            scrollingCopy
+                            scrollingCopy
+                        }
+                        .offset(x: -travel)
+                    } else {
+                        Text(text)
+                            .font(font)
+                            .foregroundStyle(color)
+                            .lineLimit(lineLimit)
+                            .truncationMode(.tail)
+                            .minimumScaleFactor(lineLimit > 1 ? 0.88 : 1)
+                            .frame(width: geo.size.width, alignment: .leading)
+                    }
                 }
-                .offset(x: -travel)
             }
             .frame(width: geo.size.width, alignment: .leading)
             .clipped()
             .background(alignment: .leading) {
-                labeled
-                    .fixedSize(horizontal: true, vertical: false)
+                scrollingCopy
                     .background(
                         GeometryReader { textGeo in
                             Color.clear.preference(key: MarqueeWidthKey.self, value: textGeo.size.width)
@@ -500,13 +577,13 @@ struct ShoreMarquee: View {
         .accessibilityLabel(text)
     }
 
-    private var labeled: some View {
+    /// Full-width copy used to measure overflow and to scroll. The resting label ellipsizes instead.
+    private var scrollingCopy: some View {
         Text(text)
             .font(font)
             .foregroundStyle(color)
-            .lineLimit(lineLimit)
-            .minimumScaleFactor(lineLimit > 1 ? 0.88 : 1)
-            .fixedSize(horizontal: lineLimit == 1, vertical: false)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private func marqueeTravel(overflow: CGFloat, at date: Date) -> CGFloat {

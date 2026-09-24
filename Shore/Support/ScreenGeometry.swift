@@ -112,7 +112,7 @@ enum IslandPlacement {
             )
             let height = hugsNotch
                 ? rest.height + IslandMetrics.compactLip + shelf
-                : 52 + shelf
+                : 60 + shelf
             return CGSize(width: width, height: height)
         }
 
