@@ -40,9 +40,9 @@ Do not disable Gatekeeper globally. Do not `xattr -cr` random downloads from the
 - Not an always-on dashed tray above the Dock
 - Not an App Store build yet (sandbox is off so MediaRemote now-playing can work)
 - Not signed with a Developer ID, and not notarized — Gatekeeper will warn until you sign it yourself
-- Not a finished silhouette or shelf. The housing-neck capsule and drag-time shelf are in the tree; spacing, shoulder, and shelf density still need polish
+- Not finished shoulder or shelf density. The housing-neck capsule is already in this tree; further shoulder and shelf-density polish is still alpha
 
-Free island apps already exist. Shore’s wedge is a camera-housing island with file parking that only appears when it is useful, kept original, kept free. The housing-neck silhouette and the shelf are better than the earlier T-bar and Dock Cove, and they are still an alpha — not commercial island-app polish.
+Free island apps already exist. Shore’s wedge is a camera-housing island with file parking that only appears when it is useful, kept original, kept free. The housing-neck capsule replaced the earlier T-bar, and the drag-time file basket replaced the always-on tray. Further shoulder and shelf-density polish is still an alpha — not commercial island-app polish.
 
 ## Architecture
 
@@ -82,6 +82,8 @@ Design placeholders (not live Mac screenshots):
 ![Island expanded](docs/screenshots/island-expanded.png)
 
 ![File basket](docs/screenshots/cove.png)
+
+The image above is the drag-time file basket. The asset is still named `cove.png`; that filename is not the product.
 
 ![Settings](docs/screenshots/settings.png)
 
